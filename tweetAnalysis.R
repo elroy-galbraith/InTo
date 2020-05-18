@@ -5,7 +5,7 @@ library(tidytext)
 library(tidyr)
 
 # name of Location
-loc = "New Delhi"
+loc = "mumbai"
 
 locCode = ifelse(loc == "New Delhi",
                  "DL",
