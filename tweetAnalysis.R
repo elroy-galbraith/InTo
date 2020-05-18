@@ -4,9 +4,15 @@ library(qdap)
 library(tidytext)
 library(tidyr)
 
+# name of Location
+loc = "New Delhi"
+
+locCode = ifelse(loc == "New Delhi",
+                 "DL",
+                 NA)
 
 # List the files of csvs
-list_of_files <- list.files(path = "./cityData/New Delhi/", recursive = TRUE,
+list_of_files <- list.files(path = paste0("./tweetData/", loc, "/"), recursive = TRUE,
                             pattern = "\\.csv", 
                             full.names = TRUE)
 
@@ -29,24 +35,28 @@ tweetPlotTheme <- theme(panel.background = element_blank(),
 # Time plot of tweets
 ts_plot(tweet, "days") +
   geom_point() +
-  labs(title = "New Delhi", x = "Days", y = "Number of Tweets") +
+  labs(title = loc, x = "Days", y = "Number of Tweets") +
   tweetPlotTheme
   
 # Unnest tweets
 unnest_tweet <- tweet %>%
   # replace abbreviations and contractions
-  mutate(text = replace_abbreviation(text) %>% # replace abbreviation
+  mutate(text = replace_abbreviation(text) %>% 
            replace_symbol() %>%
            replace_contraction() %>%
-           replace_ordinal(remove = T) %>%
-           replace_number(remove = T)) %>%
+           replace_ordinal() %>%
+           replace_number()) %>%
   # tokenize, ie. separate a tweet text into its constituent elements
   unnest_tokens("word", "text", token = "tweets", 
                 strip_punct = T, strip_url = T)
 
 topBigrams <- tweet %>%
   mutate(text = rm_twitter_url(text) %>%
-           rm_number()) %>%
+           replace_abbreviation() %>% 
+           replace_symbol() %>%
+           replace_contraction() %>%
+           replace_ordinal() %>%
+           replace_number()) %>%
   unnest_tokens("word", "text", token = "ngrams", n = 2) %>%
   separate(col = word, into = c("word1", "word2"), sep = " ") %>%
   filter(!(word1 %in% c(stop_words$word, "coronavirus", "covid19", 
@@ -169,7 +179,7 @@ library("rJava")
 .jaddClassPath("./infodynamics-dist-1.5/infodynamics.jar")
 
 
-teCal_jidt_knl_func <- function(srcArr,dstArr,histLen = 1L,width = 0.5){
+teCal_jidt_knl_func <- function(srcArr, dstArr,histLen = 1L, width = 0.5){
   # histLen: 1L as an example; width: 0.5 as an example
   # Create a TE calculator and run it:
   teCalc<-.jnew("infodynamics/measures/continuous/kernel/TransferEntropyCalculatorKernel")
@@ -182,34 +192,62 @@ teCal_jidt_knl_func <- function(srcArr,dstArr,histLen = 1L,width = 0.5){
   return(result)
 }
 
-miCal_jidt_func <- function(srcArr,dstArr){
-  # different calculators JIDT provides (select one of them!):
-  #  implementingClass <- "infodynamics/measures/continuous/kraskov/MutualInfoCalculatorMultiVariateKraskov1" # MI([1,2], [3,4]) = 0.36353
-  implementingClass <- "infodynamics/measures/continuous/kernel/MutualInfoCalculatorMultiVariateKernel"
-  #  implementingClass <- "infodynamics/measures/continuous/gaussian/MutualInfoCalculatorMultiVariateGaussian"
-  # implementingClass <- "infodynamics/measures/continuous/kraskov/MutualInfoCalculatorMultiVariateKraskov1"
-  miCalc<-.jnew(implementingClass)
-  
-  # a. Initialise the calculator to use the required number of
-  #   dimensions for each variable:
-  .jcall(miCalc,"V","initialise")
-  
-  # b. Supply the observations to compute the PDFs from:
-  .jcall(miCalc,"V","setObservations",srcArr,dstArr)
-  
-  # c. Make the MI calculation:
-  result <- .jcall(miCalc,"D","computeAverageLocalOfObservations")  # bit
-  return(result)
-}
 
-hosp_ndel <- read.csv("https://raw.githubusercontent.com/imdevskp/covid-19-india-data/master/patients_data.csv") %>%
-  filter(state_code == "DL", current_status == "Hospitalized") %>%
+hosp_data <- read.csv("https://raw.githubusercontent.com/imdevskp/covid-19-india-data/master/patients_data.csv") %>%
+  filter(state_code == locCode, current_status == "Hospitalized") %>%
   group_by(date_announced) %>%
   count() %>%
   ungroup() %>%
   mutate(Date = lubridate::dmy(date_announced))
 
-cases_ndel <- read.csv("https://open-covid-19.github.io/data/data.csv") %>%
+hosp_weekly <- hosp_data %>%
+  group_by("week" = lubridate::week(Date)) %>%
+  summarise(hosp_week = sum(n)) %>%
+  ungroup() %>%
+  mutate(weekly_change = lag(order_by(week, diff(hosp_week)/hosp_week)))
+
+hospBysent <- tweet_sentiment %>%
+  mutate(Date = as.Date( strftime(day_created, format = "%Y-%m-%d"))) %>%
+  left_join(hosp_data, by = "Date") %>%
+  group_by(Date) %>%
+  summarise(hosp = mean(n, na.rm = T)/22961, 
+            meanSent = mean(Sent, na.rm = T)) %>%
+  ungroup()
+
+hospBysent_plot <- hospBysent  %>%
+  ggplot(aes(x = hosp, y = meanSent)) +
+  geom_point(size = 3, color = "darkgreen") +
+  geom_text(aes(label = as.character(strftime(Date, format = "%b-%d"))), 
+            vjust = -.5) +
+  # scale_y_continuous(limits = c(5.7, 5.9)) +
+  # ggpmisc::stat_poly_eq(formula = y ~ x,
+  #                     aes(label = paste0("\U025FA = ",
+  #                                       stat(coef.ls)[[1]][[2]]
+  #                   )
+  #                  ),
+  #                 size = 8,
+  #                parse = F, label.y = "bottom", label.x = "right",
+  #               output.type = "numeric"
+  # geom = "debug", output.type = "numeric"
+  # ) +
+  geom_smooth(method = "lm", se = F, color = "darkgreen") +
+  labs(x = "Hospitalizations", y = "Mean Daily Happiness") +
+  tweetPlotTheme
+
+hospPredictability <- hospBysent %>%
+  group_by("week"  = lubridate::week(Date)) %>%
+  summarise(te_posTOhosp = teCal_jidt_knl_func(srcArr = meanSent, dstArr = hosp),
+            cor_posTOhosp = cor(meanSent, hosp)) %>%
+  ungroup() %>%
+  mutate(delta_TE = lag(order_by(week, diff(te_posTOhosp)/te_posTOhosp)),
+         delta_cor = lag(order_by(week, diff(cor_posTOhosp)/cor_posTOhosp)))
+
+hospPredictability %>%
+  ggplot(aes(x = week, y = delta_TE)) +
+  geom_point() +
+  geom_line()
+
+cases <- read.csv("https://open-covid-19.github.io/data/data.csv") %>%
   filter(RegionName == "Delhi") %>%
   mutate(Date = as.Date(Date)) %>%
   mutate(newCases = lag(order_by(Date, diff(Confirmed)))) %>%
@@ -237,11 +275,9 @@ casesBysent <- tweet_sentiment %>%
 casesPredictability <- casesBysent %>%
   group_by("week" = lubridate::week(Date)) %>%
   summarise(te_posTOcas = teCal_jidt_knl_func(srcArr = meanSent, dstArr = newCases),
-            mi_posTOcas = miCal_jidt_func(srcArr = meanSent, dstArr = newCases),
             cor_posTOcas = cor(meanSent, newCases, method = "spearman")) %>%
   ungroup() %>%
-  mutate(delta_TE = lag(order_by(week, diff(te_posTOcas, differences = 1))),
-         delta_MI = lag(order_by(week, diff(mi_posTOcas, differences = 1))))
+  mutate(delta_TE = lag(order_by(week, diff(te_posTOcas, differences = 1))))
 
 casesBysent_plot <- casesBysent %>%
   ggplot(aes(x = normNewCases, y = meanSent)) +
@@ -251,48 +287,6 @@ casesBysent_plot <- casesBysent %>%
   geom_smooth(method = "lm", se = F, color = "darkgreen") +
   labs(x = "Incidence Rates (per 100,000)", y = "Mean Daily Positivity") +
   tweetPlotTheme
-
-hospBysent <- tweet_sentiment %>%
-  mutate(Date = as.Date( strftime(day_created, format = "%Y-%m-%d"))) %>%
-  left_join(hosp_ndel, by = "Date") %>%
-  group_by(Date) %>%
-  summarise(hosp = mean(n, na.rm = T)/22961, 
-            meanSent = mean(Sent, na.rm = T)) %>%
-  ungroup()
-
-hospBysent_plot <- hospBysent  %>%
-  ggplot(aes(x = hosp, y = meanSent)) +
-  geom_point(size = 3, color = "darkgreen") +
-  geom_text(aes(label = as.character(strftime(Date, format = "%b-%d"))), 
-            vjust = -.5) +
-  scale_y_continuous(limits = c(5.7, 5.9)) +
-  #ggpmisc::stat_poly_eq(formula = y ~ x, 
-  #                     aes(label = paste0("\U025FA = ", 
-  #                                       stat(coef.ls)[[1]][[2]] 
-  #                   )
-  #                  ), 
-  #                 size = 8,
-  #                parse = F, label.y = "bottom", label.x = "right",
-  #               output.type = "numeric"
-  #geom = "debug", output.type = "numeric"
-  #) +
-  geom_smooth(method = "lm", se = F, color = "darkgreen") +
-  labs(x = "Hospitalizations", y = "Mean Daily Happiness") +
-  tweetPlotTheme
-
-hospPredictability <- hospBysent %>%
-  group_by("week"  = lubridate::week(Date)) %>%
-  summarise(te_posTOhosp = teCal_jidt_knl_func(srcArr = meanSent, dstArr = hosp),
-            mi_posTOhosp = miCal_jidt_func(srcArr = meanSent, dstArr = hosp),
-            cor_posTOhosp = cor(meanSent, hosp, method = "spearman")) %>%
-  ungroup() %>%
-  mutate(delta_TE = lag(order_by(week, diff(te_posTOhosp, differences = 1))),
-         delta_MI = lag(order_by(week, diff(mi_posTOhosp, differences = 1))))
-
-hospPredictability %>%
-  ggplot(aes(x = week, y = delta_TE)) +
-  geom_point() +
-  geom_line()
 
 growthBysent <- tweet_sentiment %>%
   mutate(Date = as.Date( strftime(day_created, format = "%Y-%m-%d"))) %>%
@@ -316,11 +310,9 @@ growthBysent_plot <- growthBysent  %>%
 growPredictability <- growthBysent %>%
   group_by(lubridate::week(Date)) %>%
   summarise(te_posTOgrow = teCal_jidt_knl_func(srcArr = meanSent, dstArr = growthRate),
-            mi_posTOgrow = miCal_jidt_func(srcArr = meanSent, dstArr = growthRate),
             cor_posTOgrow = cor(meanSent, growthRate, method = "spearman")) %>%
   ungroup() %>%
-  mutate(delta_TE = lag(order_by(week, diff(te_posTOgrow, differences = 1))),
-         delta_MI = lag(order_by(week, diff(mi_posTOgrow, differences = 1))))
+  mutate(delta_TE = lag(order_by(week, diff(te_posTOgrow, differences = 1))))
 
 # Spatially Plot hospitals and sentiment
 library(ggmap)
