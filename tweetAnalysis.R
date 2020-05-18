@@ -4,9 +4,11 @@ library(qdap)
 library(tidytext)
 library(tidyr)
 
+# name of Location
+loc = "New Delhi"
 
 # List the files of csvs
-list_of_files <- list.files(path = "./cityData/New Delhi/", recursive = TRUE,
+list_of_files <- list.files(path = paste0("./tweetData/", loc, "/"), recursive = TRUE,
                             pattern = "\\.csv", 
                             full.names = TRUE)
 
@@ -29,24 +31,28 @@ tweetPlotTheme <- theme(panel.background = element_blank(),
 # Time plot of tweets
 ts_plot(tweet, "days") +
   geom_point() +
-  labs(title = "New Delhi", x = "Days", y = "Number of Tweets") +
+  labs(title = loc, x = "Days", y = "Number of Tweets") +
   tweetPlotTheme
   
 # Unnest tweets
 unnest_tweet <- tweet %>%
   # replace abbreviations and contractions
-  mutate(text = replace_abbreviation(text) %>% # replace abbreviation
+  mutate(text = replace_abbreviation(text) %>% 
            replace_symbol() %>%
            replace_contraction() %>%
-           replace_ordinal(remove = T) %>%
-           replace_number(remove = T)) %>%
+           replace_ordinal() %>%
+           replace_number()) %>%
   # tokenize, ie. separate a tweet text into its constituent elements
   unnest_tokens("word", "text", token = "tweets", 
                 strip_punct = T, strip_url = T)
 
 topBigrams <- tweet %>%
   mutate(text = rm_twitter_url(text) %>%
-           rm_number()) %>%
+           replace_abbreviation() %>% 
+           replace_symbol() %>%
+           replace_contraction() %>%
+           replace_ordinal() %>%
+           replace_number()) %>%
   unnest_tokens("word", "text", token = "ngrams", n = 2) %>%
   separate(col = word, into = c("word1", "word2"), sep = " ") %>%
   filter(!(word1 %in% c(stop_words$word, "coronavirus", "covid19", 
