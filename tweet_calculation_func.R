@@ -1,6 +1,6 @@
 tweet_daily_vol_func <- function(rt_city){
   rt_city_daily <- rt_city %>%
-    group_by("tweetDay" = as.Date(strftime(created_at,format = "%Y-%m-%d"))) %>%
+    group_by("recordDate" = as.Date(strftime(created_at,format = "%Y-%m-%d"))) %>%
     count() %>%
     ungroup()
   return(rt_city_daily)
@@ -63,5 +63,18 @@ csv_epi_india_func <- function(city){
   # pivot_longer(cols = c(Total.Confirmed.cases, newCases))
   
   return(india_cases)
+}
+
+data_period_func <- function(rt_data,start_date,end_date){
+  rt_start_row_num <- which(rt_data$recordDate == start_date)
+  rt_end_row_num <- which(rt_data$recordDate == end_date)
+  rt_data_period <- rt_data[rt_start_row_num:rt_end_row_num,]
+  
+  return(rt_data_period)
+}
+
+normalization_func <- function(x){
+  nml_x = (x-min(x))/(max(x)-min(x))
+  return(nml_x)
 }
 

@@ -89,6 +89,11 @@ opt_lag4mi_func <- function(srcArr,dstArr,max_lag){
       next
     }
   }
+  if(opt_lag == 0){
+    # since the time lag for TE calculaton can not be zero.
+    # if zero, it reports an error saying "source index -1 out of bounds for double[]"
+    opt_lag <- 1
+  }
   result_list <- list(opt_lag = opt_lag,max_mi = opt_mi)
   return(result_list)
 }
@@ -101,3 +106,13 @@ opt_lag4mi_func <- function(srcArr,dstArr,max_lag){
 # miCal_jidt_func(variable1,variable2)
 # miCal_jidt_func_lag(variable1,variable2,'1')
 # opt_lag4mi_func(variable1,variable2,5)
+# teCal_jidt_knl_func(variable1,variable2,1L,0.2)
+
+te_cal_opt_hist_func <- function(src_data,dst_data,max_hist,knl_width){
+  te_value <- teCal_jidt_knl_func(src_data,dst_data,
+                                  as.integer(opt_lag4mi_func(src_data,dst_data,max_hist)$opt_lag),
+                                  knl_width)
+  return(te_value)
+}
+
+
