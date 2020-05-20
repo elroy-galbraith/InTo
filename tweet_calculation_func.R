@@ -52,4 +52,16 @@ stm_labMT_daily_func <- function(rt_city){
   return(tweet_stm)
 }
 
+csv_epi_india_func <- function(city){
+  india_cases <- read.csv("india_complete.csv") %>%
+    filter(`Name.of.State...UT` == city) %>%    #  Delhi --> Delhi; Membai --> Maharashtra
+    mutate(Date = as.Date(Date)) %>%
+    arrange(Date) %>%
+    mutate(newCases = Total.Confirmed.cases - lag(Total.Confirmed.cases)) %>%
+    mutate(activeCases = Total.Confirmed.cases - Cured.Discharged.Migrated) %>%
+    select(Date, Total.Confirmed.cases, Cured.Discharged.Migrated, newCases, activeCases)
+  # pivot_longer(cols = c(Total.Confirmed.cases, newCases))
+  
+  return(india_cases)
+}
 

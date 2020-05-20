@@ -3,9 +3,10 @@ library(tidyverse)
 library(qdap)
 library(tidytext)
 library(tidyr)
+source("tweet_calculation_func.R")
 
 # name of Location
-loc = "mumbai"
+loc = "delhi"
 
 locCode = ifelse(loc == "New Delhi",
                  "DL",
@@ -21,6 +22,47 @@ tweet <- list_of_files %>%
   set_names(.) %>%
   map_df(.f = ~read_csv(file = .x), .id = "FileName") %>%
   select(user_id, status_id, created_at, text, retweet_count, coords_coords)
+
+##---- 1. Added by Jie on 19 May, extract volumn and sentiment from tweet ----
+rt_vol_daily <- tweet_daily_vol_func(tweet)
+mean_stm_daily <- stm_labMT_daily_func(tweet)
+vol_stm_daily <- cbind(rt_vol_daily,mean_stm_daily[,2])
+##---- end ----
+
+##---- 2. Added by Jie on 19 May, load epi-data online ----
+# India data from: https://www.kaggle.com/imdevskp/covid19-corona-virus-india-dataset
+# New Delhi: since Apr 09
+delhi_cases <- csv_epi_india_func("Delhi")
+daily_case_del <- delhi_cases$newCases[39:nrow(delhi_cases)]
+hospital_del <- delhi_cases$activeCases[39:nrow(delhi_cases)]
+# Mumbai in Maharashtra state, since Apr 19
+mumbai_cases <- csv_epi_india_func("Maharashtra")
+daily_case_mum <- mumbai_cases$newCases[42:nrow(mumbai_cases)]
+hospital_mum <- mumbai_cases$activeCases[42:nrow(mumbai_cases)]
+
+# Jakarta data from: https://github.com/open-covid-19/data
+#                    https://corona.jakarta.go.id/en/data-pemantauan
+# data from Apr 18
+# daily_case_jkt
+# hospital_jkt: numbers of PDP in hospital + numbers of cases in ICU
+daily_case_jkt <- diff(c(2823,2902,3033,3112,3279,3399,3506,3605,3681,3746,3832,3950,4033,4138,
+                    4283,4355,4417,4472,4641,4709,4775,4901,4958,5140,5195,5303,5437,5617,5679,
+                    5795,5922,5996,6053))
+hospital_jkt <- c(1468,1476,1480,1486,1496,1499,860,871,885,903,945,969,982,
+                  997,994,1001,1015,1022,1034,1060,1065,1073,1103,1233,587,
+                  599,680,558,575,586,507,585) + 
+  c(1769,1839,1826,1935,1985,2010,1988,1947,1952,1950,2024,2002,2073,
+    2151,2089,2062,2080,2146,2195,2196,2281,2312,2360,2258,1843,1833,
+    1877,1900,1908,1932,1946,1936)
+
+# Bangkok data defined as 50% of the national data: https://www.worldometers.info/coronavirus/country/thailand/
+# data from Apr 18
+# daily_case_bkk: 50% of daily cases 
+# hospital_bkk: defined as 50% of active cases
+daily_case_bkk <- ceiling(c(33,32,27,19,15,13,15,53,15,9,7,9,7,6,6,3,18,1,1,3,8,4,5,6,2,0,0,7,0,3,3)/2)
+hospital_bkk <- ceiling(c(899,790,746,655,425,359,314,309,277,270,232,228,213,187,180,176,
+                          193,187,173,165,161,161,159,163,163,117,112,115,114,116,118)/2)
+##---- end ----
 
 # Plot theme
 tweetPlotTheme <- theme(panel.background = element_blank(),
