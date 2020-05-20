@@ -15,9 +15,8 @@ ui <- navbarPage( "EpICS", theme = shinytheme("darkly"),
                            div(tags$head(includeCSS("styles.css"))),
                            
                            absolutePanel(id = "controls", class = "panel panel-default",
-                                         top = 300, left = 0, right = 0, bottom = 0, 
-                                         width = 250, fixed=TRUE,
-                                         draggable = TRUE, height = "auto",
+                                         top = 250, left = 0, right = 0, bottom = 0, 
+                                         width = 300, height = 850, fixed=TRUE, draggable = TRUE,
                                          
                                          selectInput(inputId = "city", label = "Choose a Location", 
                                                      choices = c( "New Delhi" # ,
@@ -31,7 +30,11 @@ ui <- navbarPage( "EpICS", theme = shinytheme("darkly"),
                                          br(),
                                          actionButton("display", "Select"),
                                          br(),
-                                         plotOutput("sentiMeter", height="130px", width="100%")
+                                         plotOutput("sentiMeter", height="183px", width="275px"),
+                                         br(),
+                                         plotOutput("hospTime", height="183px", width="275px"),
+                                         br(),
+                                         plotOutput("caseTime", height="183px", width="275px")
                            ),
                            
                            h6("To get started, choose your Location and Date Range in the panel on the right and
@@ -132,7 +135,8 @@ server <- function(input, output, session) {
         geom_line(size = 1, color = "black") +
         geom_point(size = 5) +
         scale_color_gradient2(mid = "yellow",midpoint = 5) +
-        labs(x = "Date", y = "Positivity", color = "Mean Daily Tweets")+
+        guides(color = F) +
+        labs(x = "", y = "Positivity", color = "Mean Daily Tweets")+
         tweetPlotTheme
       
       
@@ -185,115 +189,93 @@ server <- function(input, output, session) {
     # # 
     # Generate cases data
     ifelse(input$city == "Bangkok",
-           covidCases <- get_cases_data(input$city),
+           covidCases <- get_cases_data(input$city)%>%
+             filter(Date >= input$dates[1], 
+                    Date <= input$dates[2]) ,
            ifelse(input$city == "New Delhi",
-                  covidCases <- covidCases_Del,
+                  covidCases <- covidCases_Del%>%
+                    filter(Date >= input$dates[1], 
+                           Date <= input$dates[2]) ,
                   ifelse(input$city == "Jakarta",
-                         covidCases <- get_cases_data(input$city),
-                         covidCases <- get_cases_data(input$city)))
+                         covidCases <- get_cases_data(input$city)%>%
+                           filter(Date >= input$dates[1], 
+                                  Date <= input$dates[2]) ,
+                         covidCases <- get_cases_data(input$city)%>%
+                           filter(Date >= input$dates[1], 
+                                  Date <= input$dates[2]) ))
     )
     # 
     # Sentiment by Cases
-    output$sent_by_cases <- renderPlot({
+    output$caseTime <- renderPlot({
 
-      casesBysent <- tweetCoord %>%
-        mutate(Date = as.Date(strftime(day_created, format = "%Y-%m-%d"))) %>%
-        left_join(covidCases, by = "Date") %>%
-        group_by(Date) %>%
-        summarise(newCases = mean(value, na.rm = T),
-                  meanSent = mean(Sent, na.rm = T)) %>%
-        ungroup() %>%
-        mutate(normNewCases = (newCases/21750000)*100000)
-
-      casesBysent_plot <- casesBysent %>%
-        ggplot(aes(x = normNewCases, y = meanSent)) +
-        geom_point(size = 4, color = "darkgreen") +
-        geom_smooth(method = "lm", se = F, color = "darkgreen") +
-        labs(x = "Incidence Rates (per 100,000)", y = "Mean Daily Positiveness") +
+      cases_plot <- covidCases %>%
+        ggplot(aes(x = Date, y = value, group  = 1)) +
+        geom_point() +
+        geom_line() +
+        labs(x = "", y = "New Cases") +
         tweetPlotTheme
 
-      casesBysent_plot
+      cases_plot
 
     })
     # # 
     # Generate hospitalization data
     ifelse(input$city == "Bangkok",
-           covidHosp <- get_hosp_data(input$city),
+           covidHosp <- get_hosp_data(input$city)%>%
+             filter(Date >= input$dates[1], 
+                    Date <= input$dates[2]) ,
            ifelse(input$city == "New Delhi",
-                  covidHosp <- covidHosp_Del,
+                  covidHosp <- covidHosp_Del%>%
+                    filter(Date >= input$dates[1], 
+                           Date <= input$dates[2]) ,
                   ifelse(input$city == "Jakarta",
-                         covidHosp <- get_hosp_data(input$city),
-                         covidHosp <- get_hosp_data(input$city)))
+                         covidHosp <- get_hosp_data(input$city)%>%
+                           filter(Date >= input$dates[1], 
+                                  Date <= input$dates[2]) ,
+                         covidHosp <- get_hosp_data(input$city)%>%
+                           filter(Date >= input$dates[1], 
+                                  Date <= input$dates[2]) ))
     )
     # 
     # Sentiment by Hospitalization
-    output$sent_by_hosp <- renderPlot({
+    output$hospTime <- renderPlot({
 
-      hospBysent <- tweetCoord %>%
-        mutate(Date = as.Date( strftime(day_created, format = "%Y-%m-%d"))) %>%
-        left_join(covidHosp , by = "Date") %>%
-        group_by(Date) %>%
-        summarise(hosp = mean(n, na.rm = T),
-                  meanSent = mean(Sent, na.rm = T)) %>%
-        ungroup()
-
-      hospBysent_plot <- hospBysent  %>%
-        ggplot(aes(x = hosp, y = meanSent)) +
-        geom_point(size = 3, color = "darkgreen") +
-        geom_smooth(method = "lm", se = F, color = "darkgreen") +
-        labs(x = "Hospitalizations", y = "Mean Daily Positiveness") +
+      hosp_plot <- covidHosp  %>%
+        ggplot(aes(x = Date, y = n, group = 1)) +
+        geom_point() +
+        geom_line() +
+        labs(x = "", y = "Hospitalizations") +
         tweetPlotTheme
 
-      hospBysent_plot
+      hosp_plot
 
     })
-    
     # 
-    # # Generate kriging data
+    # Generate kriging data
     kriginData <- kriging_Del
-    # 
-    # # # Krigin output
+    #
+    # Krigin output
     output$krigingMap <- renderLeaflet({
-      
+
       kde <- bkde2D(kriginData[ , c("lng", "lat")],
                     bandwidth=c(.0045, .0068), gridsize = c(100,100))
-      
+
       CL <- contourLines(kde$x1 , kde$x2 , kde$fhat)
-      
+
       # EXTRACT CONTOUR LINE LEVELS
       LEVS <- as.factor(sapply(CL, `[[`, "level"))
       NLEV <- length(levels(LEVS))
-      
-      ## CONVERT CONTOUR LINES TO POLYGONS
+
+      # CONVERT CONTOUR LINES TO POLYGONS
       pgons <- lapply(1:length(CL), function(i)
         Polygons(list(Polygon(cbind(CL[[i]]$x, CL[[i]]$y))), ID=i))
       spgons = SpatialPolygons(pgons)
-      
-      leaflet(spgons) %>% addProviderTiles(providers$OpenStreetMap.Mapnik) %>% 
+
+      leaflet(spgons) %>% addProviderTiles(providers$OpenStreetMap.Mapnik) %>%
         addPolygons(color = heat.colors(NLEV, NULL)[LEVS],
                     popup = htmlEscape(paste0("Approximately ", LEVS,
-                                              " people here may require 
+                                              " people here may require
                                               hospitalization next week.")))
-      
-      # pred.pal <- colorBin(
-      #   palette = c("blue", "yellow", "red"),
-      #   domain = round(kriginData$var1.pred,2),
-      #   n = 4, pretty = F
-      # )
-      # 
-      # leaflet() %>%
-      #   addProviderTiles(providers$OpenStreetMap.Mapnik) %>%
-      #   addCircles(data = kriginData ,
-      #              lng = ~ as.numeric(lng),
-      #              lat = ~ as.numeric(lat),
-      #              color = ~ pred.pal(var1.pred) ,
-      #              # fillColor = ~ pal(Sent),
-      #              # radius = ~ nTweets/10,
-      #              popup = ~ htmlEscape(paste("Approximately " , round(var1.pred, 0), " (st.dev. = ",
-      #                                         round(var1.stdev, 0),
-      #                                         ") people here (lng =", round(lng, 4),",lat =",round(lat,4),
-      #                                         ") may require hospitalization next week."))
-      #   )
 
     })
     

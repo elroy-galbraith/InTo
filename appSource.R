@@ -3,14 +3,11 @@ library(tidyr)
 library(stringr)
 library(lubridate)
 library(ggplot2)
-library(ggmap)
 library(ggwordcloud)
 
 library(leaflet)
 library(plotly)
-library(sp)
-library(rgdal)
-library(KernSmooth)
+
 
 library(rtweet)
 library(tidytext)
@@ -21,6 +18,8 @@ library(htmltools)
 # Convert to an SPDF
 library(sp)
 library(automap)
+library(rgdal)
+library(KernSmooth)
 
 # Plot theme
 tweetPlotTheme <- theme(panel.background = element_blank(),
@@ -28,9 +27,14 @@ tweetPlotTheme <- theme(panel.background = element_blank(),
                         panel.grid.minor = element_line(color = 'gray'),
                         axis.line = element_line(),
                         panel.border = element_rect(color = "black", fill=NA),
-                        axis.title = element_text(size=18),
-                        axis.text = element_text(size = 15),
-                        plot.title = element_text(size=18))
+                        axis.title = element_text(size=10),
+                        axis.text = element_text(size = 10),
+                        plot.title = element_text(size=10),
+                        legend.background = element_blank(),
+                        legend.text = element_text(size = 10),
+                        legend.title = element_text(size = 10),
+                        legend.position = "top",
+                        legend.direction = "horizontal")
 
 # colors of emotions based on Plutchik's colour wheel of emotion
 emoColors <- c("anger" = "#fe0000", "anticipation" = "#fea853", "disgust" = "#ff54ff", 
