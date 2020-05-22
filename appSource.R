@@ -7,7 +7,7 @@ library(ggwordcloud)
 
 library(leaflet)
 library(plotly)
-
+library(DT)
 
 library(rtweet)
 library(tidytext)
@@ -253,3 +253,14 @@ kriging_Del <- read.csv("./data/kriging_Del.csv")
 assocVals_Del <- read.csv("./data/assocVals_Del.csv")
 
 tweetEmotions_del <- read.csv("./data/tweetEmotions_Ndel.csv")
+
+topTweets <- read.csv("./data/topTweets.csv")
+
+# helper function for making checkbox
+shinyInput = function(FUN, len, id, ...) { 
+  inputs = character(len) 
+  for (i in seq_len(len)) { 
+    inputs[i] = as.character(FUN(paste0(id, i), label = NULL, ...)) 
+  } 
+  inputs 
+} 

@@ -20,7 +20,7 @@ list_of_files <- list.files(path = paste0("./tweetData/", loc, "/"), recursive =
 tweet <- list_of_files %>%
   set_names(.) %>%
   map_df(.f = ~read_csv(file = .x), .id = "FileName") %>%
-  select(user_id, status_id, created_at, text, retweet_count, coords_coords)
+  select(user_id, status_id, created_at, screen_name, text, retweet_count, coords_coords)
 
 # Plot theme
 tweetPlotTheme <- theme(panel.background = element_blank(),
@@ -52,11 +52,8 @@ unnest_tweet <- tweet %>%
 
 topBigrams <- tweet %>%
   mutate(text = rm_twitter_url(text) %>%
-           replace_abbreviation() %>% 
-           replace_symbol() %>%
-           replace_contraction() %>%
-           replace_ordinal() %>%
-           replace_number()) %>%
+           str_remove_all(pattern = "[:punct:]") %>%
+           str_remove_all(pattern = "[:digit:]")) %>%
   unnest_tokens("word", "text", token = "ngrams", n = 2) %>%
   separate(col = word, into = c("word1", "word2"), sep = " ") %>%
   filter(!(word1 %in% c(stop_words$word, "coronavirus", "covid19", 
@@ -71,6 +68,14 @@ topBigrams <- tweet %>%
   # change n to whatever number required
   top_n(n = 30, wt = n) %>%
   ungroup()
+
+# top tweets and tweets
+topTweets <- tweet %>%
+  group_by("day_created" = strftime(created_at, format = "%Y-%m-%d")) %>%
+  top_n(5,retweet_count) %>%
+  ungroup()
+
+write.csv(topTweets, "./data/topTweets.csv")
 
 # sentiment valence
 tweet_sentiment <- unnest_tweet %>%
@@ -326,7 +331,7 @@ tweetSentMap <- tweet_sentiment %>%
   summarise(meanSent = mean(Sent, na.rm = T)) %>%
   ungroup() 
 
-tweet_loc <- get_googlemap("new delhi", zoom = 12)
+tweet_loc <- get_googlemap("delhi")
 
 tweet_map <- ggmap(tweet_loc) +
    geom_point(data = tweetSentMap,
@@ -338,13 +343,13 @@ tweet_map <- ggmap(tweet_loc) +
   labs(color = "Mean Sentiment", x = "Lon", y = "Lat")
 
 # Krige data
-loc_coords <- lookup_coords("new delhi")
+loc_coords <- lookup_coords("delhi")
 
 p <- list(data.frame("x" = c(loc_coords[[2]][1], loc_coords[[2]][3]),
                      "y" = c(loc_coords[[2]][2], loc_coords[[2]][4])))
 
-randomPoints <- data.frame("lng" = c(runif(1000, min = min(p[[1]][,1]), max = max(p[[1]][,1]))),
-                           "lat" = c(runif(1000, min = min(p[[1]][,2]), max = max(p[[1]][,2])))) 
+randomPoints <- data.frame("lng" = c(runif(10000, min = min(p[[1]][,1]), max = max(p[[1]][,1]))),
+                           "lat" = c(runif(10000, min = min(p[[1]][,2]), max = max(p[[1]][,2])))) 
 
 coordinates(randomPoints) <- ~lng+lat
 randomGrid <- makegrid(randomPoints)

@@ -7,7 +7,7 @@ library(shinycssloaders)
 source(file = "./appSource.R")
 
 # Define UI for application that draws a histogram
-ui <- navbarPage( "EpICS", theme = shinytheme("darkly"),
+ui <- navbarPage( "InTo", theme = shinytheme("united"),
                   
                   # Sidebar with a slider input for number of bins 
                   tabPanel(title = "Healthcare Pressure",
@@ -47,18 +47,35 @@ ui <- navbarPage( "EpICS", theme = shinytheme("darkly"),
                            
                            fluidRow(
                              
-                             column(width = 6, plotOutput("top_bigrams") %>% withSpinner()),
-                             column(width = 6, plotOutput("top_emotions") %>% withSpinner())
-                             
+                             column(width = 6, 
+                                    plotOutput("top_bigrams") %>% withSpinner())
                            ),
                            fluidRow(
                              h3("Tweet Emotions over Time"),
-                             column(width = 6, offset = 2,
-                                    plotOutput("emoTime") %>% withSpinner()))),
+                             column(width = 5, 
+                                    plotOutput("top_emotions") %>% withSpinner()),
+                             column(width = 5, offset = 1,
+                                    plotOutput("emoTime") %>% withSpinner()))
+                           ),
+                  
+                  tabPanel(title = "Predictability"),
+                  
+                  tabPanel(title = "Potential Misinformation",
+                           
+                           column(width = 7,
+                                  h4("Help us identify misinformation. Select a misinforming text below."),
+                                  DT::dataTableOutput("topTweets")%>% withSpinner()),
+                           column(width = 4,
+                                  h4("Selected Misinformation"),
+                                  verbatimTextOutput("misinform_selected")
+                                  )
+                           ),
+                  
+                  tabPanel(title = "Healthcare Satisfaction"),
                   
                   tabPanel(title = "The Nexus Lab",
                            
-                           h3("Introducing the INFOMETER"),
+                           h3("Introducing the InTo"),
                            p("The Covid 19 pandemic provides a unique opportunity to investigate the relationship between
                            social chatter and health-seeking behaviour. We here at the Nexus Lab believe that the sentiments 
                            in the words we use can help public health officials forecast the expected demand on hospital resources.
@@ -166,6 +183,29 @@ server <- function(input, output, session) {
 
       tweetBigramsPlot
 
+    })
+    
+    # Top tweets and tweeters
+    misinform <- topTweets %>%
+      filter(as.Date(day_created) >= input$dates[1], 
+             as.Date(day_created) <= input$dates[2]) %>%
+      select("Date" = day_created,"User" = screen_name, 
+             "Tweet" = text, "Retweet Count" = retweet_count)
+    
+    output$topTweets <- DT::renderDataTable({
+      
+      datatable(misinform, 
+                options = list(dom = "ftp",
+                               initComplete = JS(
+                                 "function(settings, json) {",
+                                 "$('th').css({'background-color': '#000', 'color': '#fff'});",
+                                 "}"))) 
+      
+    }, server = T)
+    
+    output$misinform_selected = renderPrint({
+      cat("\n\n")
+      print(topTweets$text[c(input$topTweets_rows_selected)])
     })
     
     # Top Emotions
