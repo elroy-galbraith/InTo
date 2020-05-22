@@ -114,3 +114,64 @@ normalization_func <- function(x){
   return(nml_x)
 }
 
+week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
+  
+  if (geoloc == "delhi"){
+    geoloc <- "new delhi"
+  }
+  
+  loc_coords <- lookup_coords(geoloc)  # "new delhi"
+  p <- list(data.frame("x" = c(loc_coords[[2]][1], loc_coords[[2]][3]),
+                       "y" = c(loc_coords[[2]][2], loc_coords[[2]][4])))
+  randomPoints <- data.frame("lng" = c(runif(1000, min = min(p[[1]][,1]), max = max(p[[1]][,1]))),
+                             "lat" = c(runif(1000, min = min(p[[1]][,2]), max = max(p[[1]][,2]))))
+  
+  no_week <- floor(nrow(epi_data)/7)
+  
+  predicted_case <- list()
+  predicted_hosp <- list()
+  
+  tweet_sent_coords <- tweet_sent %>%
+    left_join(epi_data, by = c("day_created" = "recordDate")) %>%
+    na.omit()
+  
+  for (ii in 1:no_week) {
+    end_date <- start_date + ii*7 - 1
+    tweet_sent_coords_period <- tweet_sent_coords %>%
+      filter(day_created >= start_date & day_created <= end_date)
+    
+    coordinates(tweet_sent_coords_period) <- ~lng+lat
+    if (ii == 1){
+      coordinates(randomPoints) <- ~lng+lat # Can not do this repeatedly
+    }
+    
+    lzn.kriged.stm <- autoKrige(formula = Sent ~ 1, tweet_sent_coords_period, randomPoints) # simple Kriging
+    lzn.kriged.stm.dataframe <- as.data.frame(lzn.kriged.stm$krige_output) %>%
+      rename("Sent" = var1.pred)
+    # tweet_sentiment.dataframe <- as.data.frame(tweet_sent_coords)
+    
+    coordinates(lzn.kriged.stm.dataframe) <- ~lng+lat
+    
+    lzn.kriged.case <- autoKrige(formula = daily_case ~ Sent, 
+                                 input_data = tweet_sent_coords_period, 
+                                 new_data = lzn.kriged.stm.dataframe)
+    
+    lzn.kriged.hosp <- autoKrige(formula = hospital ~ Sent, 
+                                 input_data = tweet_sent_coords_period, 
+                                 new_data = lzn.kriged.stm.dataframe)
+    
+    lzn.kriged.case.dataframe <- as.data.frame(lzn.kriged.case$krige_output)
+    lzn.kriged.hosp.dataframe <- as.data.frame(lzn.kriged.hosp$krige_output)
+    
+    predicted_case[ii] = round(mean(lzn.kriged.case.dataframe$var1.pred))
+    predicted_hosp[ii] = round(mean(lzn.kriged.hosp.dataframe$var1.pred))
+  }
+  
+  result <- list(predicted_case_week = predicted_case, predicted_hosp_week = predicted_hosp)
+}
+
+
+
+
+
+

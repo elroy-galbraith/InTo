@@ -115,4 +115,44 @@ te_cal_opt_hist_func <- function(src_data,dst_data,max_hist,knl_width){
   return(te_value)
 }
 
+week_index_cal_func <- function(start_date,tweet_data,epi_data){
+  no_week <- floor(nrow(epi_data)/7)
+  
+  te_stm_case <- list()
+  te_stm_hosp <- list()
+  cc_stm_case <- list()
+  cc_stm_hosp <- list()
+  
+  for (ii in 1:no_week) {
+    end_date <- start_date + ii*7 - 1
+    twt_data_period <- tweet_data %>%
+      filter(recordDate >= start_date & recordDate <= end_date)
+    
+    stm_period <- twt_data_period$mean_daily_stm
+    stm_period_normal <- normalization_func(stm_period)
+    
+    epi_data_period <- epi_data %>%
+      filter(recordDate >= start_date & recordDate <= end_date)
+    daily_period <- epi_data_period$daily_case
+    hospital_period <- epi_data_period$hospital
+    daily_period_normal <- normalization_func(daily_period)
+    hospital_period_normal <- normalization_func(hospital_period)
+    
+    max_hist <- 5
+    knl_width <- 0.5
+    te_stm_case[ii] <- te_cal_opt_hist_func(stm_period_normal,daily_period_normal,max_hist,knl_width)
+    te_stm_hosp[ii] <- te_cal_opt_hist_func(stm_period_normal,hospital_period_normal,max_hist,knl_width)
+    cc_stm_case[ii] <- round(cor(stm_period_normal,daily_period_normal),3)
+    cc_stm_hosp[ii] <- round(cor(stm_period_normal,hospital_period_normal),3)
+  }
+  result <- list(te_stm_case_week = te_stm_case, te_stm_hosp_week = te_stm_hosp,
+                 cc_stm_case_week = cc_stm_case, cc_stm_hosp_week = cc_stm_hosp)
+}
+
+
+
+
+
+
+
 
