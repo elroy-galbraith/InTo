@@ -16,8 +16,6 @@ library(qdapDictionaries)
 library(htmltools)
 
 # Convert to an SPDF
-library(sp)
-library(automap)
 library(rgdal)
 library(KernSmooth)
 

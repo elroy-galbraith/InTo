@@ -26,7 +26,7 @@ ui <- navbarPage( "InTo", theme = shinytheme("united"),
                                          br() ,
                                          dateRangeInput(inputId = "dates", label = "Select a Date Range",
                                                         min = "2020-01-01", max = "2020-12-31",
-                                                        start = "2020-04-28", end = "2020-05-07"),
+                                                        start = "2020-04-01", end = "2020-04-30"),
                                          br(),
                                          actionButton("display", "Select"),
                                          br(),
@@ -73,21 +73,22 @@ ui <- navbarPage( "InTo", theme = shinytheme("united"),
                   
                   tabPanel(title = "Healthcare Satisfaction"),
                   
-                  tabPanel(title = "The Nexus Lab",
+                  tabPanel(title = "About",
                            
-                           h3("Introducing the InTo"),
+                           h3("What are you InTo?"),
                            p("The Covid 19 pandemic provides a unique opportunity to investigate the relationship between
                            social chatter and health-seeking behaviour. We here at the Nexus Lab believe that the sentiments 
                            in the words we use can help public health officials forecast the expected demand on hospital resources.
                            Imagine, analyzing the billions of tweets on Twitter and not only getting an understanding of what people
                            know or how they feel about a disease, but using that information to inform how well local hospitals 
-                           need to prepare, in the days, weeks or months ahead."),
+                           need to prepare, in the days, weeks or months ahead. So we created this tool: a infodemiological tomograph 
+                             called InTo."),
                            br(),
                            
-                           p("We do this by analysing conducting sentiment analysis on tweets about covid 19 in specific cities. 
+                           p("We conduct sentiment analysis on tweets about covid 19 in specific cities. 
                              Then we compared how the words used and sentiments expressed changed over time simultaneously with the
                              incidence of the disease and the rate of hospitalization in that area. The statistical relationship between
-                             these variables was then used to create a forecasting model to predict future health care demand. 
+                             these variables are then used to create a forecasting model to predict future health care demand. 
                              This interactive dashboard displays the results of this analysis."),
                            br(),
                            
@@ -102,14 +103,14 @@ ui <- navbarPage( "InTo", theme = shinytheme("united"),
                            
                            h3("Disclaimers"),
                            p("We do not plan to Tweet or Retweet any content. The aforementioned information from our analysis 
-           (predictability indicators over time and space, inferred sentiments, pressure on healthcare system, 
-           events and Tweets popularity, and vulnerability classes) will be shared on a public dashboard without 
-           revealing private information of users and information banned by Twitter for public disclosure (e.g. Tweet text). 
-           Thus, the only information that will be shared is about our post-processing data indicators 
-           (cross correlation functions and transfer entropy) that have health policy value for WHO and potentially for 
-           the healthcare system at smaller administrative scales as well as for research community. The top ten words in 
-           terms of frequency shared by Tweets in the sample populations will be shared. These words will not be attached 
-           to a specific user because in fact they are representative of the sampled population.")
+                           (predictability indicators over time and space, inferred sentiments, pressure on healthcare system, 
+                           events and Tweets popularity, and vulnerability classes) will be shared on a public dashboard without 
+                           revealing private information of users and information banned by Twitter for public disclosure (e.g. Tweet text). 
+                           Thus, the only information that will be shared is about our post-processing data indicators 
+                           (cross correlation functions and transfer entropy) that have health policy value for WHO and potentially for 
+                           the healthcare system at smaller administrative scales as well as for research community. The top ten words in 
+                           terms of frequency shared by Tweets in the sample populations will be shared. These words will not be attached 
+                             to a specific user because in fact they are representative of the sampled population.")
                            
                   )
 )
@@ -296,6 +297,8 @@ server <- function(input, output, session) {
     #
     # Krigin output
     output$krigingMap <- renderLeaflet({
+      
+      mPred = mean(kriginData$var1.pred, na.rm = T) 
 
       kde <- bkde2D(kriginData[ , c("lng", "lat")],
                     bandwidth=c(.0045, .0068), gridsize = c(100,100))
@@ -310,12 +313,36 @@ server <- function(input, output, session) {
       pgons <- lapply(1:length(CL), function(i)
         Polygons(list(Polygon(cbind(CL[[i]]$x, CL[[i]]$y))), ID=i))
       spgons = SpatialPolygons(pgons)
+      
+      pal <- colorFactor(palette = "YlOrRd", levels = LEVS, reverse = F)
 
-      leaflet(spgons) %>% addProviderTiles(providers$OpenStreetMap.Mapnik) %>%
-        addPolygons(color = heat.colors(NLEV, NULL)[LEVS],
-                    popup = htmlEscape(paste0("Approximately ", LEVS,
-                                              " people here may require
-                                              hospitalization next week.")))
+      leaflet(spgons) %>% 
+        addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") %>%
+        addProviderTiles(providers$OpenStreetMap.Mapnik, group = "OSM") %>%
+        addPolygons( group = "Hospitalization",
+          color = pal(LEVS),
+                    popup = htmlEscape(paste0(
+                      "Approximately ", 
+                      ifelse(as.numeric(as.character(LEVS)) - mPred > 0,
+                             round(as.numeric(as.character(LEVS)) - mPred), 0),
+                             " people here may require hospitalization next week.")
+                                       )
+                    ) %>%
+        addPolygons( group = "Cases",
+                     color = pal(LEVS),
+                     popup = htmlEscape(paste0(
+                       "Approximately ", 
+                       ifelse(as.numeric(as.character(LEVS)) - mPred > 0,
+                              round(as.numeric(as.character(LEVS)) - mPred), 0),
+                       " people here may require hospitalization next week.")
+                     )
+        ) %>%
+        addLegend(pal = pal, values = LEVS, position = "bottomright", title = "Healthcare Pressure Indicator") %>%
+        addLayersControl(position = "bottomright",
+          baseGroups = c("Satellite", "OSM"),
+          overlayGroups = c("Hospitalization", "Cases"),
+          options = layersControlOptions(collapsed = FALSE)
+        )
 
     })
     
