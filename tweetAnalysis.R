@@ -7,9 +7,9 @@ source("tweet_calculation_func.R")
 source("info_cal_jidt_func.R")
 
 # name of Location
-loc = "delhi"
+loc = "bangkok"
 
-locCode = ifelse(loc == "New Delhi",
+locCode = ifelse(loc == "delhi",
                  "DL",
                  NA)
 
@@ -24,13 +24,20 @@ tweet <- list_of_files %>%
   map_df(.f = ~read_csv(file = .x), .id = "FileName") %>%
   select(user_id, status_id, created_at, text, retweet_count, coords_coords)
 
-##---- 1. Added by Jie on 19 May, extract volumn and sentiment from tweet ----
+##---- 1. Added by Jie on May 19, extract volumn and sentiment from tweet ----
 rt_vol_daily <- tweet_daily_vol_func(tweet)
-mean_stm_daily <- stm_labMT_daily_func(tweet)
+# mean_stm_daily <- stm_labMT_daily_func(tweet)   # Function created by Jie
+tweet_sentiment <- stm_labMT_daily_func_elroy(tweet) # Function created by Jie, but using Elroy's method.
+mean_stm_daily <- tweet_sentiment %>%
+  mutate(tweetDate = as.Date( strftime(day_created, format = "%Y-%m-%d"))) %>%
+  group_by(tweetDate) %>%
+  summarise(mean_daily_stm = mean(Sent, na.rm = TRUE)) %>%
+  ungroup()
+
 vol_stm_daily <- cbind(rt_vol_daily,mean_stm_daily[,2])
 ##---- end ----
 
-##---- 2. Added by Jie on 19 May, load epi-data online ----
+##---- 2. Added by Jie on May 19, load epi-data online ----
 if (loc == "delhi"){
   # India data from: https://www.kaggle.com/imdevskp/covid19-corona-virus-india-dataset
   # New Delhi: since Apr 18
@@ -73,15 +80,18 @@ if (loc == "delhi"){
 epi_data <- data.frame(recordDate,daily_case,hospital)
 ##---- end ----
 
-##---- 3. Added by Jie on 20 May, index calculation ----
+##---- 3. Added by Jie on May 20, index calculation ----
 # specify the time period 
 start_date <- as.Date("2020-04-20")
 end_date <- as.Date("2020-05-10")
-twt_data_period <- data_period_func(vol_stm_daily,start_date,end_date)
+twt_data_period <- vol_stm_daily %>%
+  filter(recordDate >= start_date & recordDate <= end_date)
+
 stm_period <- twt_data_period$mean_daily_stm
 stm_period_normal <- normalization_func(stm_period)
 
-epi_data_period <- data_period_func(epi_data,start_date,end_date)
+epi_data_period <- epi_data %>%
+  filter(recordDate >= start_date & recordDate <= end_date)
 daily_period <- epi_data_period$daily_case
 hospital_period <- epi_data_period$hospital
 daily_period_normal <- normalization_func(daily_period)
@@ -91,8 +101,43 @@ max_hist <- 5
 knl_width <- 0.5
 te_cal_opt_hist_func(stm_period_normal,daily_period_normal,max_hist,knl_width)
 te_cal_opt_hist_func(stm_period_normal,hospital_period_normal,max_hist,knl_width)
+round(cor(stm_period_normal,daily_period_normal),3)
+round(cor(stm_period_normal,hospital_period_normal),3)
 ##---- end ----
 
+##---- 4. Added by Jie on May 22, predicted cases and hp using Kriging ----
+# Krige data
+loc_coords <- lookup_coords(loc)  # "new delhi"
+p <- list(data.frame("x" = c(loc_coords[[2]][1], loc_coords[[2]][3]),
+                     "y" = c(loc_coords[[2]][2], loc_coords[[2]][4])))
+randomPoints <- data.frame("lng" = c(runif(1000, min = min(p[[1]][,1]), max = max(p[[1]][,1]))),
+                           "lat" = c(runif(1000, min = min(p[[1]][,2]), max = max(p[[1]][,2]))))
+
+library(sp)
+library(automap)
+
+tweet_sent_coords <- tweet_sentiment %>%
+  left_join(epi_data, by = c("day_created" = "recordDate")) %>%
+  na.omit() %>%
+  filter(day_created >= "2020-04-18" & day_created <= "2020-04-24")
+
+coordinates(tweet_sent_coords) <- ~lng+lat
+coordinates(randomPoints) <- ~lng+lat
+
+lzn.kriged <- autoKrige(formula = Sent ~ 1, tweet_sent_coords, randomPoints) # simple Kriging
+lzn.kriged.dataframe <- as.data.frame(lzn.kriged$krige_output) %>%
+  rename("Sent" = var1.pred)
+tweet_sentiment.dataframe <- as.data.frame(tweet_sent_coords)
+
+coordinates(lzn.kriged.dataframe) <- ~lng+lat
+lzn.kriged <- autoKrige(formula = daily_case ~ Sent, 
+                        input_data = tweet_sent_coords, 
+                        new_data = lzn.kriged.dataframe)
+lzn.kriged.dataframe.final <- as.data.frame(lzn.kriged$krige_output)
+
+krige_predicted_result = round(mean(lzn.kriged.dataframe.final$var1.pred))
+
+##---- end ----
 
 # Plot theme
 tweetPlotTheme <- theme(panel.background = element_blank(),
@@ -308,7 +353,7 @@ hospBysent_plot <- hospBysent  %>%
 
 hospPredictability <- hospBysent %>%
   group_by("week"  = lubridate::week(Date)) %>%
-  summarise(te_posTOhosp = teCal_jidt_knl_func(srcArr = meanSent, dstArr = hosp),
+  summarise(te_posTOhosp = teCal_jidt_knl_func(srcArr = meanSent, dstArr = hosp, 1L, 0.5),
             cor_posTOhosp = cor(meanSent, hosp)) %>%
   ungroup() %>%
   mutate(delta_TE = lag(order_by(week, diff(te_posTOhosp)/te_posTOhosp)),
@@ -326,7 +371,7 @@ cases <- read.csv("https://open-covid-19.github.io/data/data.csv") %>%
   select(Date, Confirmed, newCases) %>%
   pivot_longer(cols = c(Confirmed, newCases))
 
-cases_plot <- cases_ndel  %>%
+cases_plot <- cases  %>%
   ggplot(aes(x = as.Date(Date), y = value, fill = name)) +
   geom_bar(stat = "identity") +
   scale_fill_manual(values = c("red", "blue") ,
@@ -336,7 +381,7 @@ cases_plot <- cases_ndel  %>%
 
 casesBysent <- tweet_sentiment %>%
   mutate(Date = as.Date( strftime(day_created, format = "%Y-%m-%d"))) %>%
-  left_join(cases_ndel, by = "Date") %>%
+  left_join(cases, by = "Date") %>%
   filter(name == "newCases") %>%
   group_by(Date) %>%
   summarise(newCases = mean(value, na.rm = T),
@@ -417,7 +462,7 @@ library(sp)
 library(automap)
 
 tweet_sent_coords <- tweet_sentiment %>%
-  left_join(hosp_ndel, by = c("day_created" = "Date")) %>%
+  left_join(hosp_data, by = c("day_created" = "Date")) %>%
   na.omit() %>%
   filter(day_created < "2020-04-20")
 
@@ -425,7 +470,7 @@ coordinates(tweet_sent_coords) <- ~lng+lat
 
 coordinates(randomPoints) <- ~lng+lat
 
-lzn.kriged <- autoKrige(formula = Sent ~ 1, tweet_sent_coords, randomPoints)
+lzn.kriged <- autoKrige(formula = Sent ~ 1, tweet_sent_coords, randomPoints) # simple Kriging
 
 lzn.kriged.dataframe <- as.data.frame(lzn.kriged$krige_output) %>%
   rename("Sent" = var1.pred)
@@ -434,7 +479,7 @@ tweet_sentiment.dataframe <- as.data.frame(tweet_sent_coords)
 
 coordinates(lzn.kriged.dataframe) <- ~lng+lat
 
-lzn.kriged <- autoKrige(formula = n ~ log(Sent), 
+lzn.kriged <- autoKrige(formula = n ~ Sent, 
                         input_data = tweet_sent_coords, 
                         new_data = lzn.kriged.dataframe)
 
