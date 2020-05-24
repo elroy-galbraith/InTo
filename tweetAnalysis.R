@@ -3,6 +3,7 @@ library(tidyverse)
 library(qdap)
 library(tidytext)
 library(tidyr)
+library(plyr)
 library(sp)
 library(automap)
 library(ggmap)
@@ -35,6 +36,36 @@ tweet <- list_of_files %>%
 rt_vol_daily <- tweet_daily_vol_func(tweet)
 # mean_stm_daily <- stm_labMT_daily_func(tweet)   # Function created by Jie
 tweet_sentiment <- stm_labMT_daily_func_elroy(tweet) # Function created by Jie, but using Elroy's method.
+
+unnest_tweet <- tweet %>%
+  # replace abbreviations and contractions
+  mutate(text = replace_abbreviation(text) %>% 
+           replace_symbol() %>%
+           replace_contraction() %>%
+           replace_ordinal() %>%
+           replace_number()) %>%
+  # tokenize, ie. separate a tweet text into its constituent elements
+  unnest_tokens("word", "text", token = "tweets", 
+                strip_punct = T, strip_url = T)
+
+####----- Sentiment Database: labMT ------####
+tweet_stm <- unnest_tweet %>%
+  # determine sentiments of words
+  inner_join(labMT) %>%
+  # remove values in between 4 and 6 
+  filter(!(4 < happiness_average & happiness_average < 6)) %>%
+  ## count the number of positive and negative words per status per user
+  group_by(user_id, status_id, coords_coords, 
+           "day_created" = strftime(created_at, format = "%Y-%m-%d")) %>%
+  summarise(Sent = mean(happiness_average, na.rm = T)) %>%
+  ungroup() %>%
+  separate(col = "coords_coords", into = c("lng", "lat"), sep = " ") %>%
+  mutate(lng = as.numeric(lng),
+         lat = as.numeric(lat),
+         day_created = as.Date(day_created)) 
+
+
+
 mean_stm_daily <- tweet_sentiment %>%
   mutate(tweetDate = as.Date( strftime(day_created, format = "%Y-%m-%d"))) %>%
   group_by(tweetDate) %>%
@@ -90,9 +121,9 @@ if (loc == "delhi"){
   # daily_case_bkk: 50% of daily cases 
   # hospital_bkk: defined as 50% of active cases
   daily_case <- ceiling(c(33,32,27,19,15,13,15,53,15,9,7,9,7,6,6,3,
-                          18,1,1,3,8,4,5,6,2,0,0,7,0,3,3,2,1,3)/2)
+                          18,1,1,3,8,4,5,6,2,0,0,7,0,3,3,2,1,3,0)/2)
   hospital <- ceiling(c(899,790,746,655,425,359,314,309,277,270,232,228,213,187,180,176,
-                        193,187,173,165,161,161,159,163,163,117,112,115,114,116,118,120,90,84)/2)
+                        193,187,173,165,161,161,159,163,163,117,112,115,114,116,118,120,90,84,71)/2)
   recordDate <- seq(as.Date("2020-04-18"),as.Date("2020-04-18")+length(daily_case)-1,by="day")
   
   vol_stm_daily <- vol_stm_daily %>%
@@ -114,6 +145,16 @@ week_indicator <- week_index_cal_func(as.Date("2020-04-18"),vol_stm_daily,epi_da
 predicted_epi_data <- week_krige_func(loc,as.Date("2020-04-18"),tweet_sentiment,epi_data)
 
 ##---- end ----
+
+##---- 5. Visualization for validation ----
+
+week_epi_data_df <- week_epi_data_func(epi_data)
+predicted_epi_data_df <- data.frame(
+  predicted_case = as.numeric(predicted_epi_data$predicted_case_week), # difference between using "<-" and "="
+  predicted_hosp = as.numeric(predicted_epi_data$predicted_hosp_week)
+)
+##---- end ----
+
 
 # Plot theme
 tweetPlotTheme <- theme(panel.background = element_blank(),

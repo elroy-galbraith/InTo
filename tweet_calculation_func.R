@@ -171,7 +171,29 @@ week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
 }
 
 
-
+week_epi_data <- function(epi_data){
+ 
+  no_week <- ceiling(nrow(epi_data)/7)
+  # week_epi_data_df <- epi_data %>%
+  #   mutate(week_no = 1)
+  for (ii in 1:no_week) {
+    start_index <- (ii-1)*7 + 1
+    if(ii < no_week){
+      end_index <- start_index + 6
+    } else{
+      end_index <- nrow(epi_data)
+    }
+    
+    epi_data$week_no[start_index:end_index] <- ii
+  }
+  week_epi_data_df <- epi_data %>%
+    group_by(week_no) %>%
+    summarise(daily_case_week = mean(daily_case, na.rm = TRUE),
+              daily_hosp_week = mean(hospital,na.rm = TRUE)) %>%
+    ungroup()
+  
+  return(week_epi_data_df)
+}
 
 
 
