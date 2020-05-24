@@ -188,8 +188,8 @@ week_epi_data <- function(epi_data){
   }
   week_epi_data_df <- epi_data %>%
     group_by(week_no) %>%
-    summarise(daily_case_week = mean(daily_case, na.rm = TRUE),
-              daily_hosp_week = mean(hospital,na.rm = TRUE)) %>%
+    summarise(daily_case_week = round(mean(daily_case, na.rm = TRUE)),
+              daily_hosp_week = round(mean(hospital,na.rm = TRUE))) %>%
     ungroup()
   
   return(week_epi_data_df)

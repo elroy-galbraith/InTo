@@ -3,16 +3,17 @@ library(tidyverse)
 library(qdap)
 library(tidytext)
 library(tidyr)
-library(plyr)
+library(dplyr)
 library(sp)
 library(automap)
 library(ggmap)
+library(ggplot2)
 source("tweet_calculation_func.R")
 source("info_cal_jidt_func.R")
 
 # Register a Google API.
-ggmap_key <- "AIzaSyB055tAEERlsleH1Xf83-JqAa530V7roTk"
-register_google(key = ggmap_key, write = TRUE)
+# ggmap_key <- "AIzaSyB055tAEERlsleH1Xf83-JqAa530V7roTk"
+# register_google(key = ggmap_key, write = TRUE)
 
 # name of Location
 loc = "jakarta"
@@ -36,35 +37,6 @@ tweet <- list_of_files %>%
 rt_vol_daily <- tweet_daily_vol_func(tweet)
 # mean_stm_daily <- stm_labMT_daily_func(tweet)   # Function created by Jie
 tweet_sentiment <- stm_labMT_daily_func_elroy(tweet) # Function created by Jie, but using Elroy's method.
-
-unnest_tweet <- tweet %>%
-  # replace abbreviations and contractions
-  mutate(text = replace_abbreviation(text) %>% 
-           replace_symbol() %>%
-           replace_contraction() %>%
-           replace_ordinal() %>%
-           replace_number()) %>%
-  # tokenize, ie. separate a tweet text into its constituent elements
-  unnest_tokens("word", "text", token = "tweets", 
-                strip_punct = T, strip_url = T)
-
-####----- Sentiment Database: labMT ------####
-tweet_stm <- unnest_tweet %>%
-  # determine sentiments of words
-  inner_join(labMT) %>%
-  # remove values in between 4 and 6 
-  filter(!(4 < happiness_average & happiness_average < 6)) %>%
-  ## count the number of positive and negative words per status per user
-  group_by(user_id, status_id, coords_coords, 
-           "day_created" = strftime(created_at, format = "%Y-%m-%d")) %>%
-  summarise(Sent = mean(happiness_average, na.rm = T)) %>%
-  ungroup() %>%
-  separate(col = "coords_coords", into = c("lng", "lat"), sep = " ") %>%
-  mutate(lng = as.numeric(lng),
-         lat = as.numeric(lat),
-         day_created = as.Date(day_created)) 
-
-
 
 mean_stm_daily <- tweet_sentiment %>%
   mutate(tweetDate = as.Date( strftime(day_created, format = "%Y-%m-%d"))) %>%
@@ -150,9 +122,20 @@ predicted_epi_data <- week_krige_func(loc,as.Date("2020-04-18"),tweet_sentiment,
 
 week_epi_data_df <- week_epi_data_func(epi_data)
 predicted_epi_data_df <- data.frame(
+  week_no = 2:(length(predicted_epi_data$predicted_case_week)+1),
   predicted_case = as.numeric(predicted_epi_data$predicted_case_week), # difference between using "<-" and "="
   predicted_hosp = as.numeric(predicted_epi_data$predicted_hosp_week)
 )
+epi_week_pre_obs <- full_join(week_epi_data_df,predicted_epi_data_df,by = "week_no")
+
+ggplot(epi_week_pre_obs,aes(x = week_no)) + 
+  geom_point(aes(y=daily_case_week), ) + 
+  geom_line(aes(y=daily_case_week,color="cyan")) +
+  geom_point(aes(y=predicted_case)) + 
+  geom_line(aes(y=predicted_case, color="red")) + 
+  tweetPlotTheme
+
+
 ##---- end ----
 
 
