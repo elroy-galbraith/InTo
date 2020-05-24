@@ -343,7 +343,7 @@ tweet_map <- ggmap(tweet_loc) +
   labs(color = "Mean Sentiment", x = "Lon", y = "Lat")
 
 # Krige data
-loc_coords <- lookup_coords("delhi")
+loc_coords <- lookup_coords("new delhi")
 
 p <- list(data.frame("x" = c(loc_coords[[2]][1], loc_coords[[2]][3]),
                      "y" = c(loc_coords[[2]][2], loc_coords[[2]][4])))

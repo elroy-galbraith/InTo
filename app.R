@@ -67,7 +67,14 @@ ui <- navbarPage( "InTo", theme = shinytheme("united"),
                                   DT::dataTableOutput("topTweets")%>% withSpinner()),
                            column(width = 4,
                                   h4("Selected Misinformation"),
-                                  verbatimTextOutput("misinform_selected")
+                                  DT::dataTableOutput("misinform_selected"),
+                                  actionButton("email", "Send")
+                                  # a(actionButton(inputId = "email1", label = "Send", 
+                                  #                icon = icon("envelope", lib = "font-awesome")),
+                                  #   href="mailto:elroy.galbraith@gmail.com?
+                                  #   &subject='Misinforming Tweets'
+                                  #   &body='Attached is a list of misinforming tweets'
+                                  #   &attachment='./data/misinformation.csv'")
                                   )
                            ),
                   
@@ -197,6 +204,7 @@ server <- function(input, output, session) {
       
       datatable(misinform, 
                 options = list(dom = "ftp",
+                               ordering = F,
                                initComplete = JS(
                                  "function(settings, json) {",
                                  "$('th').css({'background-color': '#000', 'color': '#fff'});",
@@ -204,9 +212,29 @@ server <- function(input, output, session) {
       
     }, server = T)
     
-    output$misinform_selected = renderPrint({
-      cat("\n\n")
-      print(topTweets$text[c(input$topTweets_rows_selected)])
+    output$misinform_selected <- DT::renderDataTable({
+
+      datatable(select(topTweets[c(input$topTweets_rows_selected),], "Tweet" = text),
+                options = list(dom = "tp", ordering = F))
+      
+    })
+    
+    observeEvent(input$email,{
+
+      select(topTweets[c(input$topTweets_rows_selected),], "Tweet" = text) %>%
+      write.csv("./data/misinformation.csv")
+
+      send.mail(
+        from = "elroy.galbraith@gmail.com",
+        to = c("nexuslabhokkaido@gmail.com"),
+        subject = "Selected misinforming tweets",
+        body = "Hi Nexus Lab, \n Attached are some misinforming tweets to track. \n Regards.",
+        smtp = list(host.name = "aspmx.l.google.com", port = 25),
+        authenticate = F,
+        attach.files = "./data/misinformation.csv",
+        send = T
+      )
+
     })
     
     # Top Emotions

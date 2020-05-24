@@ -19,6 +19,8 @@ library(htmltools)
 library(rgdal)
 library(KernSmooth)
 
+library(mailR)
+
 # Plot theme
 tweetPlotTheme <- theme(panel.background = element_blank(),
                         panel.grid.major = element_line(color = 'gray'),
