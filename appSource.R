@@ -7,6 +7,7 @@ library(ggwordcloud)
 
 library(leaflet)
 library(plotly)
+library(DT)
 
 library(rtweet)
 library(tidytext)
@@ -15,8 +16,11 @@ library(qdapDictionaries)
 library(htmltools)
 
 # Convert to an SPDF
-library(sp)
-library(automap)
+library(rgdal)
+library(KernSmooth)
+
+library(rJava)
+library(mailR)
 
 # Plot theme
 tweetPlotTheme <- theme(panel.background = element_blank(),
@@ -24,9 +28,14 @@ tweetPlotTheme <- theme(panel.background = element_blank(),
                         panel.grid.minor = element_line(color = 'gray'),
                         axis.line = element_line(),
                         panel.border = element_rect(color = "black", fill=NA),
-                        axis.title = element_text(size=18),
-                        axis.text = element_text(size = 15),
-                        plot.title = element_text(size=18))
+                        axis.title = element_text(size=10),
+                        axis.text = element_text(size = 10),
+                        plot.title = element_text(size=10),
+                        legend.background = element_blank(),
+                        legend.text = element_text(size = 10),
+                        legend.title = element_text(size = 10),
+                        legend.position = "top",
+                        legend.direction = "horizontal")
 
 # colors of emotions based on Plutchik's colour wheel of emotion
 emoColors <- c("anger" = "#fe0000", "anticipation" = "#fea853", "disgust" = "#ff54ff", 
@@ -183,65 +192,76 @@ get_emotions <- function(loc){
 
 # tweetCoord_Bangkok <- get_tweet_coords(bangkok)
 # write.csv(tweetCoord_Bangkok, "tweetCoord_Bangkok.csv")
-tweetCoord_Bang <-  read.csv("tweetCoord_Bangkok.csv")
+tweetCoord_Bang <-  read.csv("./data/tweetCoord_Bangkok.csv")
 
 # tweetCoord_Delhi <- get_tweet_coords(delhi)
 # write.csv(tweetCoord_Delhi, "tweetCoord_Delhi.csv")
-tweetCoord_Del <-  read.csv("tweetCoord_Delhi.csv")
+tweetCoord_Del <-  read.csv("./data/tweetCoord_Delhi.csv")
 
 # tweetCoord_Jak <- get_tweet_coords(jakarta)
 # write.csv(tweetCoord_Jak, "tweetCoord_Jak.csv")
-tweetCoord_Jak <-  read.csv("tweetCoord_Jak.csv")
+tweetCoord_Jak <-  read.csv("./data/tweetCoord_Jak.csv")
 
 # tweetCoord_Mum <- get_tweet_coords(mumbai)
 # write.csv(tweetCoord_Mum, "tweetCoord_Mum.csv")
-tweetCoord_Mum <-  read.csv("tweetCoord_Mum.csv")
+tweetCoord_Mum <-  read.csv("./data/tweetCoord_Mum.csv")
 
 # tweetBigrams_Bang <- get_bigrams(bangkok)
 # write.csv(tweetBigrams_Bang, "tweetBigrams_Bang.csv")
-tweetBigrams_Bang <-  read.csv("tweetBigrams_Bang.csv")
+tweetBigrams_Bang <-  read.csv("./data/tweetBigrams_Bang.csv")
 
 # tweetBigrams_Del <- get_bigrams(delhi)
 # write.csv(tweetBigrams_Del, "tweetBigrams_Del.csv")
-tweetBigrams_Del <-  read.csv("tweetBigrams_Del.csv")
+tweetBigrams_Del <-  read.csv("./data/tweetBigrams_Del.csv")
 
 # tweetBigrams_Jak <- get_bigrams(jakarta)
 # write.csv(tweetBigrams_Jak, "tweetBigrams_Jak.csv")
-tweetBigrams_Jak <-  read.csv("tweetBigrams_Jak.csv")
+tweetBigrams_Jak <-  read.csv("./data/tweetBigrams_Jak.csv")
 
 # tweetBigrams_Mum <- get_bigrams(mumbai)
 # write.csv(tweetBigrams_Mum, "tweetBigrams_Mum.csv")
-tweetBigrams_Mum <-  read.csv("tweetBigrams_Mum.csv")
+tweetBigrams_Mum <-  read.csv("./data/tweetBigrams_Mum.csv")
 
 # tweetEmo_Del <- get_emotions(delhi)
 # write.csv(tweetEmo_Del, "tweetEmo_Del.csv")
-tweetEmo_Del <-  read.csv("tweetEmo_Del.csv")
+tweetEmo_Del <-  read.csv("./data/tweetEmo_Del.csv")
 
 # tweetEmo_Bang <- get_emotions(bangkok)
 # write.csv(tweetEmo_Bang, "tweetEmo_Bang.csv")
-tweetEmo_Bang <-  read.csv("tweetEmo_Bang.csv")
+tweetEmo_Bang <-  read.csv("./data/tweetEmo_Bang.csv")
 
 # tweetEmo_Jak <- get_emotions(jakarta)
 # write.csv(tweetEmo_Jak, "tweetEmo_Jak.csv")
-tweetEmo_Jak <-  read.csv("tweetEmo_Jak.csv")
+tweetEmo_Jak <-  read.csv("./data/tweetEmo_Jak.csv")
 
 # tweetEmo_Mum <- get_emotions(mumbai)
 # write.csv(tweetEmo_Mum, "tweetEmo_Mum.csv")
-tweetEmo_Mum <-  read.csv("tweetEmo_Mum.csv")
+tweetEmo_Mum <-  read.csv("./data/tweetEmo_Mum.csv")
 
 # covidCases_Del <- get_cases_data("New Delhi")
 # write.csv(covidCases_Del, "covidCases_Del.csv")
-covidCases_Del <- read.csv("covidCases_Del.csv") %>%
+covidCases_Del <- read.csv("./data/covidCases_Del.csv") %>%
   mutate(Date = as.Date( strftime(Date, format = "%Y-%m-%d")))
 
 # covidHosp_Del <- get_hosp_data("New Delhi")
 # write.csv(covidHosp_Del, "covidHosp_Del.csv")
-covidHosp_Del <- read.csv("covidHosp_Del.csv") %>%
+covidHosp_Del <- read.csv("./data/covidHosp_Del.csv") %>%
   mutate(Date = as.Date( strftime(Date, format = "%Y-%m-%d")))
 
 # kriging data
-kriging_Del <- read.csv("kriging_Del.csv")
+kriging_Del <- read.csv("./data/kriging_Del.csv")
 
 assocVals_Del <- read.csv("./data/assocVals_Del.csv")
 
 tweetEmotions_del <- read.csv("./data/tweetEmotions_Ndel.csv")
+
+topTweets <- read.csv("./data/topTweets.csv")
+
+# helper function for making checkbox
+shinyInput = function(FUN, len, id, ...) { 
+  inputs = character(len) 
+  for (i in seq_len(len)) { 
+    inputs[i] = as.character(FUN(paste0(id, i), label = NULL, ...)) 
+  } 
+  inputs 
+} 
