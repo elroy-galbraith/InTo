@@ -198,7 +198,7 @@ server <- function(input, output, session) {
       filter(as.Date(day_created) >= input$dates[1], 
              as.Date(day_created) <= input$dates[2]) %>%
       select("Date" = day_created,"User" = screen_name, 
-             "Tweet" = text, "Retweet Count" = retweet_count)
+             "Tweet" = text, "Retweet Count" = retweet_count) 
     
     output$topTweets <- DT::renderDataTable({
       
@@ -214,14 +214,14 @@ server <- function(input, output, session) {
     
     output$misinform_selected <- DT::renderDataTable({
 
-      datatable(select(topTweets[c(input$topTweets_rows_selected),], "Tweet" = text),
+      datatable(select(misinform[c(input$topTweets_rows_selected),], Tweet),
                 options = list(dom = "tp", ordering = F))
       
     })
     
     observeEvent(input$email,{
 
-      select(topTweets[c(input$topTweets_rows_selected),], "Tweet" = text) %>%
+      select(misinform[c(input$topTweets_rows_selected),], Tweet) %>%
       write.csv("./data/misinformation.csv")
 
       send.mail(

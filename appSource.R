@@ -19,6 +19,7 @@ library(htmltools)
 library(rgdal)
 library(KernSmooth)
 
+library(rJava)
 library(mailR)
 
 # Plot theme
