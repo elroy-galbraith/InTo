@@ -4,6 +4,7 @@ library(qdap)
 library(tidytext)
 library(tidyr)
 library(dplyr)
+library(ggpubr)
 library(sp)
 library(automap)
 library(ggmap)
@@ -29,7 +30,7 @@ list_of_files <- list.files(path = paste0("./tweetData/", loc, "/"), recursive =
 
 # Read files and merge them into one file
 tweet <- list_of_files %>%
-  set_names(.) %>%
+  purrr::set_names(.) %>%
   map_df(.f = ~read_csv(file = .x), .id = "FileName") %>%
   select(user_id, status_id, created_at, text, retweet_count, coords_coords)
 
@@ -100,6 +101,14 @@ if (loc == "delhi"){
   
   vol_stm_daily <- vol_stm_daily %>%
     filter(recordDate <= as.Date("2020-04-18")+length(daily_case)-1)
+} else if (loc == "new york city"){
+  daily_case <- c(5431,5753,5651,3853,3772,6359,6048,5560,5030,4495,3704,2866,3292,4127,
+                  3866,3515,3572,2162,2347,3775,3055,3457,2843,2536,1594)
+  hospital <- c(1537,1594,1595,1330,1316,1687,1563,1513,1391,1307,1071,968,1191,
+                  1059,963,851,896,645,590,712,648,593,517,557,405)
+  recordDate <- seq(as.Date("2020-04-01"),as.Date("2020-04-01")+length(daily_case)-1,by="day")
+  vol_stm_daily <- vol_stm_daily %>%
+    filter(recordDate <= as.Date("2020-04-01")+length(daily_case)-1)
 }
 epi_data <- data.frame(recordDate,daily_case,hospital)
 ##---- end ----
@@ -123,19 +132,24 @@ week_indicator_df_bkk <- data.frame(
 # Krige data
 
 predicted_epi_data <- week_krige_func(loc,as.Date("2020-04-18"),tweet_sentiment,epi_data)
+week_krige_data_df_func(loc,as.Date("2020-04-18"),tweet_sentiment,epi_data)
 
 ##---- end ----
 
 ##---- 5. Visualization for validation ----
 
-week_epi_data_df <- week_epi_data_func(epi_data)
+# week_epi_data_df <- week_epi_data_func(epi_data)
+week_epi_data_df <- week_epidata_cumulative_func(epi_data)
+
 predicted_epi_data_df <- data.frame(
   week_no = 2:(length(predicted_epi_data$predicted_case_week)+1),
   predicted_case = as.numeric(predicted_epi_data$predicted_case_week), # difference between using "<-" and "="
   predicted_hosp = as.numeric(predicted_epi_data$predicted_hosp_week)
 )
 epi_week_pre_obs <- full_join(week_epi_data_df,predicted_epi_data_df,by = "week_no")
-
+epi_week_pre_obs$gap_case <- abs(epi_week_pre_obs$daily_case_week-epi_week_pre_obs$predicted_case)/epi_week_pre_obs$daily_case_week
+epi_week_pre_obs$gap_hosp <- abs(epi_week_pre_obs$daily_hosp_week-epi_week_pre_obs$predicted_hosp)/epi_week_pre_obs$daily_hosp_week
+write.csv(epi_week_pre_obs,"epi_week_pre_obs_gap.csv")
 
 epi_week_pre_obs %>%
   gather(key = "key", value = "value", -week_no) %>%
@@ -151,7 +165,24 @@ epi_week_pre_obs %>%
         legend.margin = margin(t = 0,unit = 'cm'),
         legend.text = element_text(hjust=0.5, vjust=0.5,size = 20)) +
   tweetPlotTheme
-ggsave("jkt-cases-preVSobs.eps", width = 10, height = 6.18)
+# ggsave("Mumbai-cases-preVSobs-cum.eps", width = 10, height = 6.18)
+
+case_preVSobs <- epi_week_pre_obs %>%
+  ggplot +
+  aes(x = daily_case_week,y = predicted_case) +
+  geom_point(size = 3,color = 'seagreen4') +
+  geom_smooth(method = 'lm',formula = y~x,se = F,color = 'seagreen4') +
+  labs(x = "Observed cases",y = "Predicted cases") +
+  # ylim(5.5, 5.8) + #scale_x_continuous
+  # xlim(0, 0.3) +
+  # scale_x_date(date_breaks = '1 day', date_labels = "%b %d") +
+  # scale_x_datetime(date_breaks = "2 hour", date_labels = "%H:%M") +
+  stat_regline_equation(aes(label =  ..eq.label..),formula = y~x, size = 5,
+                        label.x = min(epi_week_pre_obs$daily_case_week),
+                        label.y = max(epi_week_pre_obs$predicted_case,na.rm = T)) +
+  tweetPlotTheme
+case_preVSobs
+ggsave("Bangkok-case-preVSobs-Linear.eps", width = 10, height = 6.18)
 
 epi_week_pre_obs %>%
   gather(key = "key", value = "value", -week_no) %>%
@@ -167,7 +198,28 @@ epi_week_pre_obs %>%
         legend.margin = margin(t = 0,unit = 'cm'),
         legend.text = element_text(hjust=0.5, vjust=0.5,size = 20)) +
   tweetPlotTheme
-ggsave("jkt-hosp-preVSobs.eps", width = 10, height = 6.18)
+# ggsave("Mumbai-hosp-preVSobs-cum.eps", width = 10, height = 6.18)
+
+hosp_preVSobs <- epi_week_pre_obs %>%
+  ggplot +
+  aes(x = daily_hosp_week,y = predicted_hosp) +
+  geom_point(size = 3,color = 'seagreen4') +
+  geom_smooth(method = 'lm',formula = y~x,se = F,color = 'seagreen4') +
+  labs(x = "Observed hospitalizations",y = "Predicted hospitalizations") +
+  # ylim(5.5, 5.8) + #scale_x_continuous
+  # xlim(0, 0.3) +
+  # scale_x_date(date_breaks = '1 day', date_labels = "%b %d") +
+  # scale_x_datetime(date_breaks = "2 hour", date_labels = "%H:%M") +
+  
+  # stat_regline_equation(aes(label =  ..eq.label..),formula = y~x, size = 5,
+  #                       label.x = 250, 
+  #                       label.y = 300) +
+  stat_regline_equation(aes(label =  ..eq.label..),formula = y~x, size = 5,
+                        label.x = min(epi_week_pre_obs$daily_hosp_week),
+                        label.y = max(epi_week_pre_obs$predicted_hosp,na.rm = T)) +
+  tweetPlotTheme
+hosp_preVSobs
+ggsave("Bangkok-hosp-preVSobs-Linear.eps", width = 10, height = 6.18)
 
 ##---- end ----
 
