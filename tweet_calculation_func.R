@@ -116,8 +116,14 @@ normalization_func <- function(x){
 
 week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
   
+  # population_ratio <- 1
+  
   if (geoloc == "delhi"){
     geoloc <- "new delhi"
+    # population_ratio <- 0.0085 # data from http://www.populationu.com/in/maharashtra-population
+  } else if (geoloc == "mumbai"){
+    geoloc <- "Bombay"
+    # population_ratio <- 0.0275
   }
   
   loc_coords <- lookup_coords(geoloc)  # "new delhi"
@@ -171,11 +177,11 @@ week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
 }
 
 
-week_epi_data <- function(epi_data){
+week_epi_data_func <- function(epi_data){
  
   no_week <- ceiling(nrow(epi_data)/7)
-  # week_epi_data_df <- epi_data %>%
-  #   mutate(week_no = 1)
+  week_epi_data <- epi_data %>%
+    mutate(week_no = 1)
   for (ii in 1:no_week) {
     start_index <- (ii-1)*7 + 1
     if(ii < no_week){
@@ -184,9 +190,9 @@ week_epi_data <- function(epi_data){
       end_index <- nrow(epi_data)
     }
     
-    epi_data$week_no[start_index:end_index] <- ii
+    week_epi_data$week_no[start_index:end_index] <- ii
   }
-  week_epi_data_df <- epi_data %>%
+  week_epi_data_df <- week_epi_data %>%
     group_by(week_no) %>%
     summarise(daily_case_week = round(mean(daily_case, na.rm = TRUE)),
               daily_hosp_week = round(mean(hospital,na.rm = TRUE))) %>%

@@ -16,7 +16,7 @@ source("info_cal_jidt_func.R")
 # register_google(key = ggmap_key, write = TRUE)
 
 # name of Location
-loc = "jakarta"
+loc = "bangkok"
 
 locCode = ifelse(loc == "delhi",
                  "DL",
@@ -109,6 +109,14 @@ epi_data <- data.frame(recordDate,daily_case,hospital)
 
 week_indicator <- week_index_cal_func(as.Date("2020-04-18"),vol_stm_daily,epi_data)
 
+week_indicator_df_bkk <- data.frame(
+  week_no = seq(length(week_indicator$te_stm_case_week)),
+  te_stm_case = as.numeric(week_indicator$te_stm_case_week),
+  te_stm_hosp = as.numeric(week_indicator$te_stm_hosp_week),
+  cc_stm_case = as.numeric(week_indicator$cc_stm_case_week),
+  cc_stm_hosp = as.numeric(week_indicator$cc_stm_hosp_week)
+)
+
 ##---- end ----
 
 ##---- 4. Added by Jie on May 22, predicted cases and hp using Kriging ----
@@ -128,13 +136,38 @@ predicted_epi_data_df <- data.frame(
 )
 epi_week_pre_obs <- full_join(week_epi_data_df,predicted_epi_data_df,by = "week_no")
 
-ggplot(epi_week_pre_obs,aes(x = week_no)) + 
-  geom_point(aes(y=daily_case_week), ) + 
-  geom_line(aes(y=daily_case_week,color="cyan")) +
-  geom_point(aes(y=predicted_case)) + 
-  geom_line(aes(y=predicted_case, color="red")) + 
-  tweetPlotTheme
 
+epi_week_pre_obs %>%
+  gather(key = "key", value = "value", -week_no) %>%
+  filter(key %in% c("daily_case_week", "predicted_case")) %>%
+  ggplot(aes(x = week_no, y = value, color = key)) +
+  geom_point(size = 3) +
+  geom_line() +
+  xlab('Week (since Apr 18)') + ylab('Observed,predicted cases') +
+  scale_color_manual(labels = c('observed','predicted'),
+                     values=c('seagreen4','red')) +
+  theme(legend.position = 'top',
+        legend.direction = 'horizontal',
+        legend.margin = margin(t = 0,unit = 'cm'),
+        legend.text = element_text(hjust=0.5, vjust=0.5,size = 20)) +
+  tweetPlotTheme
+ggsave("jkt-cases-preVSobs.eps", width = 10, height = 6.18)
+
+epi_week_pre_obs %>%
+  gather(key = "key", value = "value", -week_no) %>%
+  filter(key %in% c("daily_hosp_week", "predicted_hosp")) %>%
+  ggplot(aes(x = week_no, y = value, color = key)) +
+  geom_point(size = 3) +
+  geom_line() +
+  xlab('Week (since Apr 18)') + ylab('Observed,predicted hospitalization') +
+  scale_color_manual(labels = c('observed','predicted'),
+                     values=c('seagreen4','red')) +
+  theme(legend.position = 'top',
+        legend.direction = 'horizontal',
+        legend.margin = margin(t = 0,unit = 'cm'),
+        legend.text = element_text(hjust=0.5, vjust=0.5,size = 20)) +
+  tweetPlotTheme
+ggsave("jkt-hosp-preVSobs.eps", width = 10, height = 6.18)
 
 ##---- end ----
 
@@ -145,9 +178,9 @@ tweetPlotTheme <- theme(panel.background = element_blank(),
                         panel.grid.minor = element_line(color = 'gray'),
                         axis.line = element_line(),
                         panel.border = element_rect(color = "black", fill=NA),
-                        axis.title = element_text(size=18),
+                        axis.title = element_text(size=20),
                         axis.text = element_text(size = 15),
-                        plot.title = element_text(size=18))
+                        plot.title = element_text(size=20))
 
 # Time plot of tweets
 ts_plot(tweet, "days") +
