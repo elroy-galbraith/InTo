@@ -34,6 +34,11 @@ tweet <- list_of_files %>%
   map_df(.f = ~read_csv(file = .x), .id = "FileName") %>%
   select(user_id, status_id, created_at, text, retweet_count, coords_coords)
 
+# subset of tweet: misinformed tweet
+# misinform_tweet <- tweet %>%
+#   filter(str_detect(text, "fake|misinformation|lie|false"))
+# tweet <- misinform_tweet
+
 ##---- 1. Added by Jie on May 19, extract volumn and sentiment from tweet ----
 rt_vol_daily <- tweet_daily_vol_func(tweet)
 # mean_stm_daily <- stm_labMT_daily_func(tweet)   # Function created by Jie
@@ -46,6 +51,7 @@ mean_stm_daily <- tweet_sentiment %>%
   ungroup()
 
 vol_stm_daily <- cbind(rt_vol_daily,mean_stm_daily[,2])
+# write.csv(vol_stm_daily,"daily-vol-stm.csv")
 ##---- end ----
 
 ##---- 2. Added by Jie on May 19, load epi-data online ----
@@ -118,14 +124,14 @@ epi_data <- data.frame(recordDate,daily_case,hospital)
 
 week_indicator <- week_index_cal_func(as.Date("2020-04-18"),vol_stm_daily,epi_data)
 
-week_indicator_df_bkk <- data.frame(
+week_indicator_df <- data.frame(
   week_no = seq(length(week_indicator$te_stm_case_week)),
   te_stm_case = as.numeric(week_indicator$te_stm_case_week),
   te_stm_hosp = as.numeric(week_indicator$te_stm_hosp_week),
   cc_stm_case = as.numeric(week_indicator$cc_stm_case_week),
   cc_stm_hosp = as.numeric(week_indicator$cc_stm_hosp_week)
 )
-
+write.csv(week_indicator_df,"misinform-indicator.csv")
 ##---- end ----
 
 ##---- 4. Added by Jie on May 22, predicted cases and hp using Kriging ----
@@ -147,9 +153,9 @@ predicted_epi_data_df <- data.frame(
   predicted_hosp = as.numeric(predicted_epi_data$predicted_hosp_week)
 )
 epi_week_pre_obs <- full_join(week_epi_data_df,predicted_epi_data_df,by = "week_no")
-epi_week_pre_obs$gap_case <- abs(epi_week_pre_obs$daily_case_week-epi_week_pre_obs$predicted_case)/epi_week_pre_obs$daily_case_week
-epi_week_pre_obs$gap_hosp <- abs(epi_week_pre_obs$daily_hosp_week-epi_week_pre_obs$predicted_hosp)/epi_week_pre_obs$daily_hosp_week
-write.csv(epi_week_pre_obs,"epi_week_pre_obs_gap.csv")
+# epi_week_pre_obs$gap_case <- abs(epi_week_pre_obs$daily_case_week-epi_week_pre_obs$predicted_case)/epi_week_pre_obs$daily_case_week
+# epi_week_pre_obs$gap_hosp <- abs(epi_week_pre_obs$daily_hosp_week-epi_week_pre_obs$predicted_hosp)/epi_week_pre_obs$daily_hosp_week
+# write.csv(epi_week_pre_obs,"epi-week-pre-obs-gap.csv")
 
 epi_week_pre_obs %>%
   gather(key = "key", value = "value", -week_no) %>%
@@ -172,17 +178,19 @@ case_preVSobs <- epi_week_pre_obs %>%
   aes(x = daily_case_week,y = predicted_case) +
   geom_point(size = 3,color = 'seagreen4') +
   geom_smooth(method = 'lm',formula = y~x,se = F,color = 'seagreen4') +
-  labs(x = "Observed cases",y = "Predicted cases") +
-  # ylim(5.5, 5.8) + #scale_x_continuous
-  # xlim(0, 0.3) +
-  # scale_x_date(date_breaks = '1 day', date_labels = "%b %d") +
-  # scale_x_datetime(date_breaks = "2 hour", date_labels = "%H:%M") +
+  labs(x = "Observed cases",y = "Predicted cases",title = paste("RMSE=",round(rmse_val,2))) +
   stat_regline_equation(aes(label =  ..eq.label..),formula = y~x, size = 5,
                         label.x = min(epi_week_pre_obs$daily_case_week),
                         label.y = max(epi_week_pre_obs$predicted_case,na.rm = T)) +
+  # stat_regline_equation(aes(label =  ..eq.label..),formula = y~x, size = 5,
+  #                       label.x = 6,
+  #                       label.y = 12.5) +
   tweetPlotTheme
 case_preVSobs
-ggsave("Bangkok-case-preVSobs-Linear.eps", width = 10, height = 6.18)
+ggsave("Delhi-case-preVSobs-Linear.eps", width = 10, height = 6.18)
+
+# y <- 53+0.41*epi_week_pre_obs$daily_case_week
+# rmse_val <- rmse(y[2:length(y)],epi_week_pre_obs$predicted_case[2:nrow(epi_week_pre_obs)])
 
 epi_week_pre_obs %>%
   gather(key = "key", value = "value", -week_no) %>%
@@ -205,21 +213,19 @@ hosp_preVSobs <- epi_week_pre_obs %>%
   aes(x = daily_hosp_week,y = predicted_hosp) +
   geom_point(size = 3,color = 'seagreen4') +
   geom_smooth(method = 'lm',formula = y~x,se = F,color = 'seagreen4') +
-  labs(x = "Observed hospitalizations",y = "Predicted hospitalizations") +
-  # ylim(5.5, 5.8) + #scale_x_continuous
-  # xlim(0, 0.3) +
-  # scale_x_date(date_breaks = '1 day', date_labels = "%b %d") +
-  # scale_x_datetime(date_breaks = "2 hour", date_labels = "%H:%M") +
-  
+  labs(x = "Observed hospitalizations",y = "Predicted hospitalizations",title = paste("RMSE=",round(rmse_val,2))) +
   # stat_regline_equation(aes(label =  ..eq.label..),formula = y~x, size = 5,
-  #                       label.x = 250, 
-  #                       label.y = 300) +
+  #                       label.x = 250,
+  #                       label.y = 310) +
   stat_regline_equation(aes(label =  ..eq.label..),formula = y~x, size = 5,
                         label.x = min(epi_week_pre_obs$daily_hosp_week),
                         label.y = max(epi_week_pre_obs$predicted_hosp,na.rm = T)) +
   tweetPlotTheme
 hosp_preVSobs
-ggsave("Bangkok-hosp-preVSobs-Linear.eps", width = 10, height = 6.18)
+ggsave("Delhi-hosp-preVSobs-Linear.eps", width = 10, height = 6.18)
+
+# y <- 1100+0.32*epi_week_pre_obs$daily_hosp_week
+# rmse_val <- rmse(y[2:length(y)],epi_week_pre_obs$predicted_hosp[2:nrow(epi_week_pre_obs)])
 
 ##---- end ----
 
@@ -232,7 +238,7 @@ tweetPlotTheme <- theme(panel.background = element_blank(),
                         panel.border = element_rect(color = "black", fill=NA),
                         axis.title = element_text(size=20),
                         axis.text = element_text(size = 15),
-                        plot.title = element_text(size=20))
+                        plot.title = element_text(size=16))
 
 # Time plot of tweets
 ts_plot(tweet, "days") +
@@ -523,17 +529,17 @@ tweetSentMap <- tweet_sentiment %>%
   summarise(meanSent = mean(Sent, na.rm = T)) %>%
   ungroup() 
 
-tweet_loc <- get_googlemap("new delhi", zoom = 12)
+tweet_loc <- get_googlemap("mumbai", zoom = 12)
 
 tweet_map <- ggmap(tweet_loc) +
-   geom_point(data = tweet_tweetSentMap,
+   geom_point(data = tweetSentMap,
              aes(x = as.numeric(lng),
                  y = as.numeric(lat),
                  color = meanSent),
              size = 4) +
   scale_color_gradient2(midpoint = 5) +
   labs(color = "Mean Sentiment", x = "Lon", y = "Lat")
-
+tweet_map
 # Krige data
 loc_coords <- lookup_coords("new delhi")
 
