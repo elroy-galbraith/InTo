@@ -5,6 +5,7 @@ library(tidytext)
 library(tidyr)
 library(dplyr)
 library(ggpubr)
+library(Metrics)
 library(sp)
 library(automap)
 library(ggmap)
@@ -17,7 +18,7 @@ source("info_cal_jidt_func.R")
 # register_google(key = ggmap_key, write = TRUE)
 
 # name of Location
-loc = "bangkok"
+loc = "new york city"
 
 locCode = ifelse(loc == "delhi",
                  "DL",
@@ -29,9 +30,14 @@ list_of_files <- list.files(path = paste0("./tweetData/", loc, "/"), recursive =
                             full.names = TRUE)
 
 # Read files and merge them into one file
+# tweet <- list_of_files %>%
+#   purrr::set_names(.) %>%
+#   map_df(.f = ~read_csv(file = .x), .id = "FileName") %>%
+#   select(user_id, status_id, created_at, text, retweet_count, coords_coords)
+
 tweet <- list_of_files %>%
   purrr::set_names(.) %>%
-  map_df(.f = ~read_csv(file = .x), .id = "FileName") %>%
+  map_df(.f = ~read_twitter_csv(file = .x), .id = "FileName") %>%
   select(user_id, status_id, created_at, text, retweet_count, coords_coords)
 
 # subset of tweet: misinformed tweet
@@ -51,30 +57,31 @@ mean_stm_daily <- tweet_sentiment %>%
   ungroup()
 
 vol_stm_daily <- cbind(rt_vol_daily,mean_stm_daily[,2])
-# write.csv(vol_stm_daily,"daily-vol-stm.csv")
+write.csv(vol_stm_daily,"daily-vol-stm.csv")
 ##---- end ----
 
 ##---- 2. Added by Jie on May 19, load epi-data online ----
+start_date_data <- as.Date("2020-04-18")
 if (loc == "delhi"){
   # India data from: https://www.kaggle.com/imdevskp/covid19-corona-virus-india-dataset
   # New Delhi: since Apr 18
   delhi_cases <- csv_epi_india_func("Delhi")
   daily_case <- delhi_cases$newCases[48:nrow(delhi_cases)]
   hospital <- delhi_cases$activeCases[48:nrow(delhi_cases)]
-  recordDate <- seq(as.Date("2020-04-18"),delhi_cases$Date[nrow(delhi_cases)],by="day")
+  recordDate <- seq(start_date_data,delhi_cases$Date[nrow(delhi_cases)],by="day")
   
   # keep the length of tweet data identical to that of epi-data
   vol_stm_daily <- vol_stm_daily %>%
-    filter(recordDate <= delhi_cases$Date[nrow(delhi_cases)])
+    filter(recordDate >= start_date_data & recordDate <= delhi_cases$Date[nrow(delhi_cases)])
 } else if(loc == "mumbai") {
   # Mumbai in Maharashtra state, since Apr 18
   mumbai_cases <- csv_epi_india_func("Maharashtra")
   daily_case <- mumbai_cases$newCases[41:nrow(mumbai_cases)]
   hospital <- mumbai_cases$activeCases[41:nrow(mumbai_cases)]
-  recordDate <- seq(as.Date("2020-04-18"),mumbai_cases$Date[nrow(mumbai_cases)],by="day")
+  recordDate <- seq(start_date_data,mumbai_cases$Date[nrow(mumbai_cases)],by="day")
   
   vol_stm_daily <- vol_stm_daily %>%
-    filter(recordDate <= mumbai_cases$Date[nrow(mumbai_cases)])
+    filter(recordDate >= start_date_data & recordDate <= mumbai_cases$Date[nrow(mumbai_cases)])
 } else if(loc == "jakarta") {
   # Jakarta data from: https://github.com/open-covid-19/data
   #                    https://corona.jakarta.go.id/en/data-pemantauan
@@ -83,40 +90,69 @@ if (loc == "delhi"){
   # hospital_jkt: numbers of PDP in hospital + numbers of cases in ICU
   daily_case <- diff(c(2823,2902,3033,3112,3279,3399,3506,3605,3681,3746,3832,3950,4033,4138,
                        4283,4355,4417,4472,4641,4709,4775,4901,4958,5140,5195,5303,5437,5617,5679,
-                       5795,5922,5996,6053,6150,6220,6316))
+                       5795,5922,5996,6053,6150,6220,6316,6443,6561,6628,6689,6826,6929))
   hospital <- c(1468,1476,1480,1486,1496,1499,860,871,885,903,945,969,982,
                 997,994,1001,1015,1022,1034,1060,1065,1073,1103,1233,587,
-                599,680,558,575,586,507,585,585,651,652) + 
+                599,680,558,575,586,507,585,585,651,652,784,658,722,810,910,1005) + 
     c(1769,1839,1826,1935,1985,2010,1988,1947,1952,1950,2024,2002,2073,
       2151,2089,2062,2080,2146,2195,2196,2281,2312,2360,2258,1843,1833,
-      1877,1900,1908,1932,1946,1936,1969,1955,1975)
-  recordDate <- seq(as.Date("2020-04-18"),as.Date("2020-04-18")+length(daily_case)-1,by="day")
+      1877,1900,1908,1932,1946,1936,1969,1955,1975,2006,2031,2044,2044,2034,2055)
+  recordDate <- seq(start_date_data,start_date_data+length(daily_case)-1,by="day")
   
   vol_stm_daily <- vol_stm_daily %>%
-    filter(recordDate <= as.Date("2020-04-18")+length(daily_case)-1)
+    filter(recordDate >= start_date_data & recordDate <= start_date_data+length(daily_case)-1)
 } else if (loc == "bangkok"){
   # Bangkok data defined as 50% of the national data: https://www.worldometers.info/coronavirus/country/thailand/
   # data from Apr 18
   # daily_case_bkk: 50% of daily cases 
   # hospital_bkk: defined as 50% of active cases
   daily_case <- ceiling(c(33,32,27,19,15,13,15,53,15,9,7,9,7,6,6,3,
-                          18,1,1,3,8,4,5,6,2,0,0,7,0,3,3,2,1,3,0)/2)
+                          18,1,1,3,8,4,5,6,2,0,0,7,0,3,3,2,1,3,0,3,0,2,3,9,11)/2)
   hospital <- ceiling(c(899,790,746,655,425,359,314,309,277,270,232,228,213,187,180,176,
-                        193,187,173,165,161,161,159,163,163,117,112,115,114,116,118,120,90,84,71)/2)
-  recordDate <- seq(as.Date("2020-04-18"),as.Date("2020-04-18")+length(daily_case)-1,by="day")
+                        193,187,173,165,161,161,159,163,163,117,112,115,114,116,118,120,90,
+                        84,71,68,63,57,59,66,63)/2)
+  recordDate <- seq(start_date_data,start_date_data+length(daily_case)-1,by="day")
   
   vol_stm_daily <- vol_stm_daily %>%
-    filter(recordDate <= as.Date("2020-04-18")+length(daily_case)-1)
+    filter(recordDate >= start_date_data & recordDate <= start_date_data+length(daily_case)-1)
 } else if (loc == "new york city"){
-  daily_case <- c(5431,5753,5651,3853,3772,6359,6048,5560,5030,4495,3704,2866,3292,4127,
-                  3866,3515,3572,2162,2347,3775,3055,3457,2843,2536,1594)
-  hospital <- c(1537,1594,1595,1330,1316,1687,1563,1513,1391,1307,1071,968,1191,
-                  1059,963,851,896,645,590,712,648,593,517,557,405)
-  recordDate <- seq(as.Date("2020-04-01"),as.Date("2020-04-01")+length(daily_case)-1,by="day")
+  daily_case <- c(5041,4500,3710,2870,3301,4128,3865,3517,3574,2164,2347,3776,3054,3455,2841,2537)
+  hospital <- c(1398,1312,1078,980,1204,1062,978,864,889,643,587,712,649,591,527,541)
+  recordDate <- seq(as.Date("2020-04-09"),as.Date("2020-04-09")+length(daily_case)-1,by="day")
   vol_stm_daily <- vol_stm_daily %>%
-    filter(recordDate <= as.Date("2020-04-01")+length(daily_case)-1)
+    filter(recordDate <= as.Date("2020-04-09")+length(daily_case)-1)
 }
 epi_data <- data.frame(recordDate,daily_case,hospital)
+# write.csv(epi_data,"bangkok-epi-data.csv")
+##---- end ----
+
+##---- 3. Added by Jie on Jun 1, mis-index calculation ----
+# week_mis_indicator <- week_index_cal_func(as.Date("2020-04-18"),vol_stm_daily,epi_data)
+# week_mis_indicator_df <- data.frame(
+#   week_no = seq(length(week_mis_indicator$te_stm_case_week)),
+#   te_stm_case = as.numeric(week_mis_indicator$te_stm_case_week),
+#   te_stm_hosp = as.numeric(week_mis_indicator$te_stm_hosp_week),
+#   cc_stm_case = as.numeric(week_mis_indicator$cc_stm_case_week),
+#   cc_stm_hosp = as.numeric(week_mis_indicator$cc_stm_hosp_week)
+# )
+# write.csv(week_mis_indicator_df,"mis-week-indicator.csv")
+# 
+# epi_stm_vol_data <- cbind(epi_data,vol_stm_daily[,2:3])
+# lm_case_stm <- lm(formula = daily_case ~ mean_daily_stm, data = epi_stm_vol_data)
+# lm_hosp_stm <- lm(formula = hospital ~ mean_daily_stm, data = epi_stm_vol_data)
+# epi_stm_vol_data$predicted_mis_case <- round(lm_case_stm$coefficients[1] + 
+#   lm_case_stm$coefficients[2] * epi_stm_vol_data$mean_daily_stm)
+# epi_stm_vol_data$predicted_mis_hosp <- round(lm_hosp_stm$coefficients[1] +
+#   lm_hosp_stm$coefficients[2] * epi_stm_vol_data$mean_daily_stm)
+# epi_stm_vol_data <- epi_stm_vol_data %>%
+#   select(recordDate,daily_case,hospital,predicted_mis_case,predicted_mis_hosp)
+# week_mis_epi_data_df <- week_mis_cum_epidata_func(epi_stm_vol_data)  # function only for mis-informed tweets.
+# 
+# week_mis_epi_data_df$gap_mis_case <- (week_mis_epi_data_df$pre_mis_case_week-week_mis_epi_data_df$daily_case_week)/week_mis_epi_data_df$daily_case_week
+# week_mis_epi_data_df$gap_mis_hosp <- (week_mis_epi_data_df$pre_mis_hosp_week-week_mis_epi_data_df$daily_hosp_week)/week_mis_epi_data_df$daily_hosp_week
+# 
+# write.csv(week_mis_epi_data_df,"mis-epi-week-pre-obs-gap.csv")
+
 ##---- end ----
 
 ##---- 3. Added by Jie on May 20, index calculation ----
@@ -131,7 +167,7 @@ week_indicator_df <- data.frame(
   cc_stm_case = as.numeric(week_indicator$cc_stm_case_week),
   cc_stm_hosp = as.numeric(week_indicator$cc_stm_hosp_week)
 )
-write.csv(week_indicator_df,"misinform-indicator.csv")
+write.csv(week_indicator_df,"week-indicator.csv")
 ##---- end ----
 
 ##---- 4. Added by Jie on May 22, predicted cases and hp using Kriging ----
@@ -153,9 +189,9 @@ predicted_epi_data_df <- data.frame(
   predicted_hosp = as.numeric(predicted_epi_data$predicted_hosp_week)
 )
 epi_week_pre_obs <- full_join(week_epi_data_df,predicted_epi_data_df,by = "week_no")
-# epi_week_pre_obs$gap_case <- abs(epi_week_pre_obs$daily_case_week-epi_week_pre_obs$predicted_case)/epi_week_pre_obs$daily_case_week
-# epi_week_pre_obs$gap_hosp <- abs(epi_week_pre_obs$daily_hosp_week-epi_week_pre_obs$predicted_hosp)/epi_week_pre_obs$daily_hosp_week
-# write.csv(epi_week_pre_obs,"epi-week-pre-obs-gap.csv")
+epi_week_pre_obs$gap_case <- (epi_week_pre_obs$predicted_case-epi_week_pre_obs$daily_case_week)/epi_week_pre_obs$daily_case_week
+epi_week_pre_obs$gap_hosp <- (epi_week_pre_obs$predicted_hosp-epi_week_pre_obs$daily_hosp_week)/epi_week_pre_obs$daily_hosp_week
+write.csv(epi_week_pre_obs,"epi-week-pre-obs-gap.csv")
 
 epi_week_pre_obs %>%
   gather(key = "key", value = "value", -week_no) %>%
@@ -171,7 +207,7 @@ epi_week_pre_obs %>%
         legend.margin = margin(t = 0,unit = 'cm'),
         legend.text = element_text(hjust=0.5, vjust=0.5,size = 20)) +
   tweetPlotTheme
-# ggsave("Mumbai-cases-preVSobs-cum.eps", width = 10, height = 6.18)
+ggsave("Bangkok-cases-preVSobs-cum.eps", width = 10, height = 6.18)
 
 case_preVSobs <- epi_week_pre_obs %>%
   ggplot +
@@ -187,10 +223,10 @@ case_preVSobs <- epi_week_pre_obs %>%
   #                       label.y = 12.5) +
   tweetPlotTheme
 case_preVSobs
-ggsave("Delhi-case-preVSobs-Linear.eps", width = 10, height = 6.18)
+ggsave("Bangkok-case-preVSobs-Linear.eps", width = 10, height = 6.18)
 
-# y <- 53+0.41*epi_week_pre_obs$daily_case_week
-# rmse_val <- rmse(y[2:length(y)],epi_week_pre_obs$predicted_case[2:nrow(epi_week_pre_obs)])
+y <- 6+0.59*epi_week_pre_obs$daily_case_week
+rmse_val <- rmse(y[2:length(y)],epi_week_pre_obs$predicted_case[2:nrow(epi_week_pre_obs)])
 
 epi_week_pre_obs %>%
   gather(key = "key", value = "value", -week_no) %>%
@@ -206,7 +242,7 @@ epi_week_pre_obs %>%
         legend.margin = margin(t = 0,unit = 'cm'),
         legend.text = element_text(hjust=0.5, vjust=0.5,size = 20)) +
   tweetPlotTheme
-# ggsave("Mumbai-hosp-preVSobs-cum.eps", width = 10, height = 6.18)
+ggsave("Bangkok-hosp-preVSobs-cum.eps", width = 10, height = 6.18)
 
 hosp_preVSobs <- epi_week_pre_obs %>%
   ggplot +
@@ -222,10 +258,10 @@ hosp_preVSobs <- epi_week_pre_obs %>%
                         label.y = max(epi_week_pre_obs$predicted_hosp,na.rm = T)) +
   tweetPlotTheme
 hosp_preVSobs
-ggsave("Delhi-hosp-preVSobs-Linear.eps", width = 10, height = 6.18)
+ggsave("Bangkok-hosp-preVSobs-Linear.eps", width = 10, height = 6.18)
 
-# y <- 1100+0.32*epi_week_pre_obs$daily_hosp_week
-# rmse_val <- rmse(y[2:length(y)],epi_week_pre_obs$predicted_hosp[2:nrow(epi_week_pre_obs)])
+y <- 61+1.3*epi_week_pre_obs$daily_hosp_week
+rmse_val <- rmse(y[2:length(y)],epi_week_pre_obs$predicted_hosp[2:nrow(epi_week_pre_obs)])
 
 ##---- end ----
 

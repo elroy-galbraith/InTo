@@ -120,13 +120,17 @@ week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
   
   if (geoloc == "delhi"){
     geoloc <- "new delhi"
-    # population_ratio <- 0.0085 # data from http://www.populationu.com/in/maharashtra-population
+    loc_coords <- lookup_coords(geoloc)
   } else if (geoloc == "mumbai"){
     geoloc <- "Bombay"
-    # population_ratio <- 0.0275
+    loc_coords <- lookup_coords(geoloc)
+  } else if(geoloc == "new york city"){
+    load("nyc_coords.RData")
+  } else{
+    loc_coords <- lookup_coords(geoloc)
   }
   
-  loc_coords <- lookup_coords(geoloc)  # "new delhi"
+  # loc_coords <- lookup_coords(geoloc)  # "new delhi"
   p <- list(data.frame("x" = c(loc_coords[[2]][1], loc_coords[[2]][3]),
                        "y" = c(loc_coords[[2]][2], loc_coords[[2]][4])))
   randomPoints <- data.frame("lng" = c(runif(1000, min = min(p[[1]][,1]), max = max(p[[1]][,1]))),
@@ -184,13 +188,17 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   
   if (geoloc == "delhi"){
     geoloc <- "new delhi"
-    # population_ratio <- 0.0085 # data from http://www.populationu.com/in/maharashtra-population
+    loc_coords <- lookup_coords(geoloc)
   } else if (geoloc == "mumbai"){
     geoloc <- "Bombay"
-    # population_ratio <- 0.0275
+    loc_coords <- lookup_coords(geoloc)
+  } else if(geoloc == "new york city"){
+    load("nyc_coords.RData")
+  } else{
+    loc_coords <- lookup_coords(geoloc)
   }
   
-  loc_coords <- lookup_coords(geoloc)  # "new delhi"
+  # loc_coords <- lookup_coords(geoloc)  # "new delhi"
   p <- list(data.frame("x" = c(loc_coords[[2]][1], loc_coords[[2]][3]),
                        "y" = c(loc_coords[[2]][2], loc_coords[[2]][4])))
   randomPoints <- data.frame("lng" = c(runif(1000, min = min(p[[1]][,1]), max = max(p[[1]][,1]))),
@@ -278,5 +286,49 @@ week_epidata_cumulative_func <- function(epi_data){
   return(week_epidata_cumu_df)
 }
 
+week_mis_cum_epidata_func <- function(mis_epi_data){
+  
+  no_week <- ceiling(nrow(mis_epi_data)/7)
+  
+  daily_case_week <- c()
+  daily_hosp_week <- c()
+  pre_mis_case_week <- c()
+  pre_mis_hosp_week <- c()
+  
+  for (ii in 1:no_week) {
+    if(ii < no_week){
+      end_index <- ii * 7
+    } else{
+      end_index <- nrow(mis_epi_data)
+    }
+    daily_case_week[ii] <- round(mean(mis_epi_data$daily_case[1:end_index]))
+    daily_hosp_week[ii] <- round(mean(mis_epi_data$hospital[1:end_index]))
+    pre_mis_case_week[ii] <- round(mean(mis_epi_data$predicted_mis_case[1:end_index]))
+    pre_mis_hosp_week[ii] <- round(mean(mis_epi_data$predicted_mis_hosp[1:end_index]))
+  }
+  
+  
+  
+  week_case_hosp <- data.frame(
+    week_no = seq(no_week),
+    daily_case_week,
+    daily_hosp_week
+  )
+  
+  if ((nrow(mis_epi_data)/7 - no_week) != 0){
+    pre_mis_case_week <- pre_mis_case_week[1:(length(pre_mis_case_week)-1)]
+    pre_mis_hosp_week <- pre_mis_hosp_week[1:(length(pre_mis_hosp_week)-1)]
+  }
+  
+  week_pre_mis_case_hosp <- data.frame(
+    week_no = 2:(length(pre_mis_case_week)+1),
+    pre_mis_case_week,
+    pre_mis_hosp_week
+  )
+  
+  week_mis_epidata_cumu_df <- full_join(week_case_hosp,week_pre_mis_case_hosp,by = "week_no")
+  
+  return(week_mis_epidata_cumu_df)
+}
 
 
