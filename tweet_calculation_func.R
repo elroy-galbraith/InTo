@@ -260,6 +260,35 @@ week_epi_data_func <- function(epi_data){
   return(week_epi_data_df)
 }
 
+
+week_tweet_data_func <- function(vol_stm_daily){
+  
+  no_week <- ceiling(nrow(vol_stm_daily)/7)
+  
+  week_tweet_data <- vol_stm_daily %>%
+    mutate(week_no = 1)
+  for (ii in 1:no_week) {
+    start_index <- (ii-1)*7 + 1
+    if(ii < no_week){
+      end_index <- start_index + 6
+    } else{
+      end_index <- nrow(epi_data)
+    }
+    
+    week_tweet_data$week_no[start_index:end_index] <- ii
+  }
+  week_tweet_data_df <- week_tweet_data %>%
+    group_by(week_no) %>%
+    summarise(vol_week = round(mean(n, na.rm = TRUE)),
+              stm_week = mean(mean_daily_stm,na.rm = TRUE)) %>%
+    ungroup()
+  
+  return(week_tweet_data_df)
+}
+
+
+
+
 week_epidata_cumulative_func <- function(epi_data){
   
   no_week <- ceiling(nrow(epi_data)/7)

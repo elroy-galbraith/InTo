@@ -18,7 +18,7 @@ source("info_cal_jidt_func.R")
 # register_google(key = ggmap_key, write = TRUE)
 
 # name of Location
-loc = "new york city"
+loc = "bangkok"
 
 locCode = ifelse(loc == "delhi",
                  "DL",
@@ -41,9 +41,9 @@ tweet <- list_of_files %>%
   select(user_id, status_id, created_at, text, retweet_count, coords_coords)
 
 # subset of tweet: misinformed tweet
-# misinform_tweet <- tweet %>%
-#   filter(str_detect(text, "fake|misinformation|lie|false"))
-# tweet <- misinform_tweet
+misinform_tweet <- tweet %>%
+  filter(str_detect(text, "fake|misinformation|lie|false"))
+tweet <- misinform_tweet
 
 ##---- 1. Added by Jie on May 19, extract volumn and sentiment from tweet ----
 rt_vol_daily <- tweet_daily_vol_func(tweet)
@@ -58,6 +58,9 @@ mean_stm_daily <- tweet_sentiment %>%
 
 vol_stm_daily <- cbind(rt_vol_daily,mean_stm_daily[,2])
 write.csv(vol_stm_daily,"daily-vol-stm.csv")
+
+week_tweet_data <- week_tweet_data_func(vol_stm_daily)
+write.csv(week_tweet_data,"week-mis-vol-stm.csv")
 ##---- end ----
 
 ##---- 2. Added by Jie on May 19, load epi-data online ----
