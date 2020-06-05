@@ -114,6 +114,7 @@ normalization_func <- function(x){
   return(nml_x)
 }
 
+
 week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
   
   # population_ratio <- 1
@@ -122,8 +123,9 @@ week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
     geoloc <- "new delhi"
     loc_coords <- lookup_coords(geoloc)
   } else if (geoloc == "mumbai"){
-    geoloc <- "Bombay"
-    loc_coords <- lookup_coords(geoloc)
+    # geoloc <- "Bombay"
+    # loc_coords <- lookup_coords(geoloc)
+    load("mumbai_coords.RData")
   } else if(geoloc == "new york city"){
     load("nyc_coords.RData")
   } else{
@@ -179,8 +181,7 @@ week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
   
   result <- list(predicted_case_week = predicted_case, predicted_hosp_week = predicted_hosp)
   return(result)
-}
-
+} # has been updated as "week_krige_func_update"
 week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   
   # save the kriging data in csv files.
@@ -190,8 +191,9 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
     geoloc <- "new delhi"
     loc_coords <- lookup_coords(geoloc)
   } else if (geoloc == "mumbai"){
-    geoloc <- "Bombay"
-    loc_coords <- lookup_coords(geoloc)
+    # geoloc <- "Bombay"
+    # loc_coords <- lookup_coords(geoloc)
+    load("mumbai_coords.RData")
   } else if(geoloc == "new york city"){
     load("nyc_coords.RData")
   } else{
@@ -213,7 +215,7 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   coordinates(tweet_sent_coords_period) <- ~lng+lat
   coordinates(randomPoints) <- ~lng+lat # Can not do this repeatedly
   
-  lzn.kriged.stm <- autoKrige(formula = Sent ~ 1, tweet_sent_coords_period, randomPoints) # simple Kriging
+  lzn.kriged.stm <- autoKrige(formula = Sent ~ 1, tweet_sent_coords_period,randomPoints) # simple Kriging
   lzn.kriged.stm.dataframe <- as.data.frame(lzn.kriged.stm$krige_output) %>%
     rename("Sent" = var1.pred)
   # tweet_sentiment.dataframe <- as.data.frame(tweet_sent_coords)
@@ -233,6 +235,66 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   write.csv(lzn.kriged.case.dataframe,"kriging_data_case.csv")
   write.csv(lzn.kriged.hosp.dataframe,"kriging_data_hosp.csv")
   
+} # has been updated as "week_krige_data_df_func_update"
+
+
+week_krige_func_update <- function(start_date,tweet_sent,epi_data){
+  
+  no_week <- floor(nrow(epi_data)/7)
+  
+  predicted_case <- list()
+  predicted_hosp <- list()
+  
+  tweet_sent_coords <- tweet_sent %>%
+    left_join(epi_data, by = c("day_created" = "recordDate")) %>%
+    na.omit()
+  
+  for (ii in 1:no_week) {
+    end_date <- start_date + ii*7 - 1
+    tweet_sent_coords_period <- tweet_sent_coords %>%
+      filter(day_created >= start_date & day_created <= end_date)
+    
+    coordinates(tweet_sent_coords_period) <- ~lng+lat
+    
+    lzn.kriged.case <- autoKrige(formula = daily_case ~ Sent, 
+                                 input_data = tweet_sent_coords_period, 
+                                 new_data = tweet_sent_coords_period)
+    
+    lzn.kriged.hosp <- autoKrige(formula = hospital ~ Sent, 
+                                 input_data = tweet_sent_coords_period, 
+                                 new_data = tweet_sent_coords_period)
+    
+    lzn.kriged.case.dataframe <- as.data.frame(lzn.kriged.case$krige_output)
+    lzn.kriged.hosp.dataframe <- as.data.frame(lzn.kriged.hosp$krige_output)
+    
+    predicted_case[ii] = round(mean(lzn.kriged.case.dataframe$var1.pred))
+    predicted_hosp[ii] = round(mean(lzn.kriged.hosp.dataframe$var1.pred))
+  }
+  
+  result <- list(predicted_case_week = predicted_case, predicted_hosp_week = predicted_hosp)
+  return(result)
+}
+week_krige_data_df_func_update <- function(loc,tweet_sent,epi_data){
+  
+  tweet_sent_coords <- tweet_sent %>%
+    left_join(epi_data, by = c("day_created" = "recordDate")) %>%
+    na.omit()
+  
+  tweet_sent_coords_period <- tweet_sent_coords
+  
+  coordinates(tweet_sent_coords_period) <- ~lng+lat
+  
+  lzn.kriged.case <- autoKrige(formula = daily_case ~ Sent, 
+                               input_data = tweet_sent_coords_period, 
+                               new_data = tweet_sent_coords_period)
+  lzn.kriged.hosp <- autoKrige(formula = hospital ~ Sent, 
+                               input_data = tweet_sent_coords_period, 
+                               new_data = tweet_sent_coords_period)
+  
+  lzn.kriged.case.dataframe <- as.data.frame(lzn.kriged.case$krige_output)
+  lzn.kriged.hosp.dataframe <- as.data.frame(lzn.kriged.hosp$krige_output)
+  write.csv(lzn.kriged.case.dataframe,paste(loc,"-kriging-data-case.csv",sep = ""))
+  write.csv(lzn.kriged.hosp.dataframe,paste(loc,"-kriging-data-hosp.csv",sep = ""))
 }
 
 
@@ -259,8 +321,6 @@ week_epi_data_func <- function(epi_data){
   
   return(week_epi_data_df)
 }
-
-
 week_tweet_data_func <- function(vol_stm_daily){
   
   no_week <- ceiling(nrow(vol_stm_daily)/7)
@@ -272,7 +332,7 @@ week_tweet_data_func <- function(vol_stm_daily){
     if(ii < no_week){
       end_index <- start_index + 6
     } else{
-      end_index <- nrow(epi_data)
+      end_index <- nrow(vol_stm_daily)
     }
     
     week_tweet_data$week_no[start_index:end_index] <- ii
@@ -285,8 +345,6 @@ week_tweet_data_func <- function(vol_stm_daily){
   
   return(week_tweet_data_df)
 }
-
-
 
 
 week_epidata_cumulative_func <- function(epi_data){
