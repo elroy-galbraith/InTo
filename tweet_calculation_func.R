@@ -126,7 +126,7 @@ week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
   } else if (geoloc == "mumbai"){
     # geoloc <- "Bombay"
     # loc_coords <- lookup_coords(geoloc)
-    load("mumbai_coords.RData")
+    # load("mumbai_coords.RData")
     load("Maharashtra_coords.RData")
   } else if(geoloc == "new york city"){
     load("nyc_coords.RData")
