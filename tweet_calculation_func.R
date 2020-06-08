@@ -120,12 +120,14 @@ week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
   # population_ratio <- 1
   
   if (geoloc == "delhi"){
-    geoloc <- "new delhi"
-    loc_coords <- lookup_coords(geoloc)
+    # geoloc <- "new delhi"
+    # loc_coords <- lookup_coords(geoloc)
+    load("Delhi_coords.RData")
   } else if (geoloc == "mumbai"){
     # geoloc <- "Bombay"
     # loc_coords <- lookup_coords(geoloc)
     load("mumbai_coords.RData")
+    load("Maharashtra_coords.RData")
   } else if(geoloc == "new york city"){
     load("nyc_coords.RData")
   } else{
@@ -188,12 +190,14 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   # population_ratio <- 1
   
   if (geoloc == "delhi"){
-    geoloc <- "new delhi"
-    loc_coords <- lookup_coords(geoloc)
+    # geoloc <- "new delhi"
+    # loc_coords <- lookup_coords(geoloc)
+    load("Delhi_coords.RData")
   } else if (geoloc == "mumbai"){
     # geoloc <- "Bombay"
     # loc_coords <- lookup_coords(geoloc)
-    load("mumbai_coords.RData")
+    # load("mumbai_coords.RData")
+    load("Maharashtra_coords.RData")
   } else if(geoloc == "new york city"){
     load("nyc_coords.RData")
   } else{
@@ -213,9 +217,12 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   tweet_sent_coords_period <- tweet_sent_coords
   
   coordinates(tweet_sent_coords_period) <- ~lng+lat
+  # tweet_sent_coords_period <- tweet_sent_coords_period[which(!duplicated(tweet_sent_coords_period@coords)),]
   coordinates(randomPoints) <- ~lng+lat # Can not do this repeatedly
   
-  lzn.kriged.stm <- autoKrige(formula = Sent ~ 1, tweet_sent_coords_period,randomPoints) # simple Kriging
+  lzn.kriged.stm <- autoKrige(formula = Sent ~ 1, 
+                              input_data = tweet_sent_coords_period,
+                              new_data = randomPoints) # simple Kriging
   lzn.kriged.stm.dataframe <- as.data.frame(lzn.kriged.stm$krige_output) %>%
     rename("Sent" = var1.pred)
   # tweet_sentiment.dataframe <- as.data.frame(tweet_sent_coords)
@@ -232,8 +239,9 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   
   lzn.kriged.case.dataframe <- as.data.frame(lzn.kriged.case$krige_output)
   lzn.kriged.hosp.dataframe <- as.data.frame(lzn.kriged.hosp$krige_output)
-  write.csv(lzn.kriged.case.dataframe,"kriging_data_case.csv")
-  write.csv(lzn.kriged.hosp.dataframe,"kriging_data_hosp.csv")
+  
+  write.csv(lzn.kriged.case.dataframe,paste(loc,"-kriging-data-case.csv",sep = ""))
+  write.csv(lzn.kriged.hosp.dataframe,paste(loc,"-kriging-data-hosp.csv",sep = ""))
   
 } # has been updated as "week_krige_data_df_func_update"
 

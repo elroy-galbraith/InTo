@@ -8,6 +8,7 @@ library(ggpubr)
 library(Metrics)
 library(sp)
 library(automap)
+library(gstat)
 library(ggmap)
 library(ggplot2)
 source("tweet_calculation_func.R")
@@ -18,7 +19,7 @@ source("info_cal_jidt_func.R")
 # register_google(key = ggmap_key, write = TRUE)
 
 # name of Location
-loc = "delhi"
+loc = "bangkok"
 
 locCode = ifelse(loc == "delhi",
                  "DL",
@@ -41,9 +42,9 @@ tweet <- list_of_files %>%
   select(user_id, status_id, created_at, text, retweet_count, coords_coords)
 
 # subset of tweet: misinformed tweet
-misinform_tweet <- tweet %>%
-  filter(str_detect(text, "fake|misinformation|lie|false"))
-tweet <- misinform_tweet
+# misinform_tweet <- tweet %>%
+#   filter(str_detect(text, "fake|misinformation|lie|false"))
+# tweet <- misinform_tweet
 
 ##---- 1. Added by Jie on May 19, extract volumn and sentiment from tweet ----
 rt_vol_daily <- tweet_daily_vol_func(tweet)
@@ -96,15 +97,15 @@ if (loc == "delhi"){
   daily_case <- diff(c(2823,2902,3033,3112,3279,3399,3506,3605,3681,3746,3832,3950,4033,4138,
                        4283,4355,4417,4472,4641,4709,4775,4901,4958,5140,5195,5303,5437,5617,5679,
                        5795,5922,5996,6053,6150,6220,6316,6443,6561,6628,6689,6826,6929,7053,7151,
-                       7272,7383,7459,7539,7600))
+                       7272,7383,7459,7539,7600,7684,7786,7946,8037))
   hospital <- c(1468,1476,1480,1486,1496,1499,860,871,885,903,945,969,982,
                 997,994,1001,1015,1022,1034,1060,1065,1073,1103,1233,587,
                 599,680,558,575,586,507,585,585,651,652,784,658,722,810,910,
-                1005,1105,816,1134,1268,1281,1372,1526) + 
+                1005,1105,816,1134,1268,1281,1372,1526,1424,1486,1361,1387) + 
     c(1769,1839,1826,1935,1985,2010,1988,1947,1952,1950,2024,2002,2073,
       2151,2089,2062,2080,2146,2195,2196,2281,2312,2360,2258,1843,1833,
       1877,1900,1908,1932,1946,1936,1969,1955,1975,2006,2031,2044,2044,
-      2034,2055,2007,1848,1823,1794,1743,1699,1670)
+      2034,2055,2007,1848,1823,1794,1743,1699,1670,1633,1635,1445,1448)
   recordDate <- seq(start_date_data,start_date_data+length(daily_case)-1,by="day")
   
   vol_stm_daily <- vol_stm_daily %>%
@@ -115,10 +116,10 @@ if (loc == "delhi"){
   # daily_case_bkk: 50% of daily cases 
   # hospital_bkk: defined as 50% of active cases
   daily_case <- ceiling(c(33,32,27,19,15,13,15,53,15,9,7,9,7,6,6,3,
-                          18,1,1,3,8,4,5,6,2,0,0,7,0,3,3,2,1,3,0,3,0,2,3,9,11,11,1,4,1,1,1,17)/2)
+                          18,1,1,3,8,4,5,6,2,0,0,7,0,3,3,2,1,3,0,3,0,2,3,9,11,11,1,4,1,1,1,17,1,2,8)/2)
   hospital <- ceiling(c(899,790,746,655,425,359,314,309,277,270,232,228,213,187,180,176,
                         193,187,173,165,161,161,159,163,163,117,112,115,114,116,118,120,90,
-                        84,71,68,63,57,59,66,63,74,59,61,60,59,58,75)/2)
+                        84,71,68,63,57,59,66,63,74,59,61,60,59,58,75,73,75,82)/2)
   recordDate <- seq(start_date_data,start_date_data+length(daily_case)-1,by="day")
   
   vol_stm_daily <- vol_stm_daily %>%
@@ -132,6 +133,26 @@ if (loc == "delhi"){
 }
 epi_data <- data.frame(recordDate,daily_case,hospital)
 write.csv(epi_data,paste(loc,"-epi-data.csv",sep = ""))
+
+# epi_data %>%
+#   gather(key = "key", value = "value", -recordDate) %>%
+#   filter(key %in% c("daily_case", "hospital")) %>%
+#   ggplot(aes(x = recordDate, y = value, color = key)) +
+#   # geom_point(size = 3) +
+#   geom_line(size = 1) +
+#   ylim(0,4000) +
+#   xlab('Date') + ylab("Daily cases, hospitalizations") +
+#   scale_color_manual(labels = c('Cases','Hospitalizations'),
+#                      values=c('deepskyblue2','orange')) +
+#   scale_x_date(date_breaks = '2 day', date_labels = "%b %d") +
+#   theme(legend.position = 'top',
+#         legend.direction = 'horizontal',
+#         legend.margin = margin(t = 0,unit = 'cm'),
+#         legend.text = element_text(hjust=0.5, vjust=0.5,size = 20),
+#         axis.text.x = element_text(angle = 90, hjust = 0.5, vjust = 0.5, size = 12)) +
+#   tweetPlotTheme
+# ggsave(paste(loc,"-daily-cases-hosp.eps",sep = ""), width = 10, height = 6.18)
+
 ##---- end ----
 
 ##---- 3. Added by Jie on Jun 1, mis-index calculation ----
@@ -180,6 +201,9 @@ write.csv(week_indicator_df,paste(loc,"-week-indicator.csv",sep = ""))
 
 ##---- 5. Added by Jie on May 22, predicted cases and hp using Kriging ----
 # Krige data
+
+predicted_epi_data <- week_krige_func(loc,as.Date("2020-04-18"),tweet_sentiment,epi_data)
+week_krige_data_df_func(loc,as.Date("2020-04-18"),tweet_sentiment,epi_data)
 
 predicted_epi_data <- week_krige_func_update(as.Date("2020-04-18"),tweet_sentiment,epi_data)
 week_krige_data_df_func_update(loc,tweet_sentiment,epi_data)
