@@ -19,7 +19,7 @@ source("info_cal_jidt_func.R")
 # register_google(key = ggmap_key, write = TRUE)
 
 # name of Location
-loc = "bangkok"
+loc = "jakarta"
 
 locCode = ifelse(loc == "delhi",
                  "DL",
@@ -42,9 +42,9 @@ tweet <- list_of_files %>%
   select(user_id, status_id, created_at, text, retweet_count, coords_coords)
 
 # subset of tweet: misinformed tweet
-# misinform_tweet <- tweet %>%
-#   filter(str_detect(text, "fake|misinformation|lie|false"))
-# tweet <- misinform_tweet
+misinform_tweet <- tweet %>%
+  filter(str_detect(text, "fake|misinformation|lie|false"))
+tweet <- misinform_tweet
 
 ##---- 1. Added by Jie on May 19, extract volumn and sentiment from tweet ----
 rt_vol_daily <- tweet_daily_vol_func(tweet)
@@ -58,15 +58,10 @@ mean_stm_daily <- tweet_sentiment %>%
   ungroup()
 
 vol_stm_daily <- cbind(rt_vol_daily,mean_stm_daily[,2])
-write.csv(vol_stm_daily,paste(loc,"-daily-vol-stm.csv",sep = ""))
 
-# row1 <- list(as.Date("2020-05-31"),0,5)
-# vol_stm_daily <- rbind(vol_stm_daily[1:43,],row1,vol_stm_daily[44:nrow(vol_stm_daily),]) # for Jakarta misinformation
-week_tweet_data <- week_tweet_data_func(vol_stm_daily)
-write.csv(week_tweet_data,paste(loc,"-week-vol-stm.csv",sep = ""))
 ##---- end ----
 
-##---- 2. Added by Jie on May 19, load epi-data online ----
+##---- 2. Added by Jie on May 19, load epi-data online and save epi-data and tweet-data in csv files ----
 start_date_data <- as.Date("2020-04-18")
 if (loc == "delhi"){
   # India data from: https://www.kaggle.com/imdevskp/covid19-corona-virus-india-dataset
@@ -97,15 +92,15 @@ if (loc == "delhi"){
   daily_case <- diff(c(2823,2902,3033,3112,3279,3399,3506,3605,3681,3746,3832,3950,4033,4138,
                        4283,4355,4417,4472,4641,4709,4775,4901,4958,5140,5195,5303,5437,5617,5679,
                        5795,5922,5996,6053,6150,6220,6316,6443,6561,6628,6689,6826,6929,7053,7151,
-                       7272,7383,7459,7539,7600,7684,7786,7946,8037))
+                       7272,7383,7459,7539,7600,7684,7786,7946,8037,8276,8423))
   hospital <- c(1468,1476,1480,1486,1496,1499,860,871,885,903,945,969,982,
                 997,994,1001,1015,1022,1034,1060,1065,1073,1103,1233,587,
                 599,680,558,575,586,507,585,585,651,652,784,658,722,810,910,
-                1005,1105,816,1134,1268,1281,1372,1526,1424,1486,1361,1387) + 
+                1005,1105,816,1134,1268,1281,1372,1526,1424,1486,1361,1387,1537,1438) + 
     c(1769,1839,1826,1935,1985,2010,1988,1947,1952,1950,2024,2002,2073,
       2151,2089,2062,2080,2146,2195,2196,2281,2312,2360,2258,1843,1833,
       1877,1900,1908,1932,1946,1936,1969,1955,1975,2006,2031,2044,2044,
-      2034,2055,2007,1848,1823,1794,1743,1699,1670,1633,1635,1445,1448)
+      2034,2055,2007,1848,1823,1794,1743,1699,1670,1633,1635,1445,1448,1442,1427)
   recordDate <- seq(start_date_data,start_date_data+length(daily_case)-1,by="day")
   
   vol_stm_daily <- vol_stm_daily %>%
@@ -116,24 +111,50 @@ if (loc == "delhi"){
   # daily_case_bkk: 50% of daily cases 
   # hospital_bkk: defined as 50% of active cases
   daily_case <- ceiling(c(33,32,27,19,15,13,15,53,15,9,7,9,7,6,6,3,
-                          18,1,1,3,8,4,5,6,2,0,0,7,0,3,3,2,1,3,0,3,0,2,3,9,11,11,1,4,1,1,1,17,1,2,8)/2)
+                          18,1,1,3,8,4,5,6,2,0,0,7,0,3,3,2,1,3,0,3,0,2,3,9,
+                          11,11,1,4,1,1,1,17,1,2,8,7,2,4)/2)
   hospital <- ceiling(c(899,790,746,655,425,359,314,309,277,270,232,228,213,187,180,176,
                         193,187,173,165,161,161,159,163,163,117,112,115,114,116,118,120,90,
-                        84,71,68,63,57,59,66,63,74,59,61,60,59,58,75,73,75,82)/2)
+                        84,71,68,63,57,59,66,63,74,59,61,60,59,58,75,73,75,82,88,90,86)/2)
   recordDate <- seq(start_date_data,start_date_data+length(daily_case)-1,by="day")
   
   vol_stm_daily <- vol_stm_daily %>%
     filter(recordDate >= start_date_data & recordDate <= start_date_data+length(daily_case)-1)
 } else if (loc == "new york city"){
+  start_date_data <- as.Date("2020-04-09")
   daily_case <- c(5041,4500,3710,2870,3301,4128,3865,3517,3574,2164,2347,3776,3054,3455,2841,2537)
   hospital <- c(1398,1312,1078,980,1204,1062,978,864,889,643,587,712,649,591,527,541)
-  recordDate <- seq(as.Date("2020-04-09"),as.Date("2020-04-09")+length(daily_case)-1,by="day")
+  recordDate <- seq(start_date_data,start_date_data+length(daily_case)-1,by="day")
   vol_stm_daily <- vol_stm_daily %>%
-    filter(recordDate <= as.Date("2020-04-09")+length(daily_case)-1)
+    filter(recordDate <= start_date_data+length(daily_case)-1)
+} else if (loc == "myanmar") {
+  # data since 2020-06-01
+  start_date_data <- as.Date("2020-06-01")
+  daily_case <- c(4,4,1,3,0,4,2,2)
+  hospital <- c(84,83,82,82,79,78,80,79)
+  recordDate <- seq(start_date_data,start_date_data+length(daily_case)-1,by="day")
+  vol_stm_daily <- vol_stm_daily %>%
+    filter(recordDate >= start_date_data & recordDate <= start_date_data+length(daily_case)-1)
 }
 epi_data <- data.frame(recordDate,daily_case,hospital)
 write.csv(epi_data,paste(loc,"-epi-data.csv",sep = ""))
 
+# write the tweet table in csv files.
+write.csv(vol_stm_daily,paste(loc,"-daily-vol-stm.csv",sep = ""))
+
+# row1 <- list(as.Date("2020-05-31"),0,0,0,5)
+# vol_stm_daily <- rbind(vol_stm_daily[1:43,],row1,vol_stm_daily[44:nrow(vol_stm_daily),]) # for Jakarta misinformation
+
+# row1 <- list(as.Date("2020-06-07"),0,0,0,5)
+# vol_stm_daily <- rbind(vol_stm_daily[1:50,],row1,vol_stm_daily[51:nrow(vol_stm_daily),]) # for Bangkok misinformation
+
+week_tweet_data <- week_tweet_data_func(vol_stm_daily)
+write.csv(week_tweet_data,paste(loc,"-week-vol-stm.csv",sep = ""))
+
+tweet_cut <- tweet %>%
+  filter(created_at >= start_date_data)
+retweet_week <- retweet_vol_func(tweet_cut)
+write.csv(retweet_week,paste(loc,"-week-retweet.csv",sep = ""))
 # epi_data %>%
 #   gather(key = "key", value = "value", -recordDate) %>%
 #   filter(key %in% c("daily_case", "hospital")) %>%
@@ -156,38 +177,38 @@ write.csv(epi_data,paste(loc,"-epi-data.csv",sep = ""))
 ##---- end ----
 
 ##---- 3. Added by Jie on Jun 1, mis-index calculation ----
-# week_mis_indicator <- week_index_cal_func(as.Date("2020-04-18"),vol_stm_daily,epi_data)
-# week_mis_indicator_df <- data.frame(
-#   week_no = seq(length(week_mis_indicator$te_stm_case_week)),
-#   te_stm_case = as.numeric(week_mis_indicator$te_stm_case_week),
-#   te_stm_hosp = as.numeric(week_mis_indicator$te_stm_hosp_week),
-#   cc_stm_case = as.numeric(week_mis_indicator$cc_stm_case_week),
-#   cc_stm_hosp = as.numeric(week_mis_indicator$cc_stm_hosp_week)
-# )
-# write.csv(week_mis_indicator_df,paste(loc,"-mis-week-indicator.csv",sep = ""))
-# 
-# epi_stm_vol_data <- cbind(epi_data,vol_stm_daily[,2:3])
-# lm_case_stm <- lm(formula = daily_case ~ mean_daily_stm, data = epi_stm_vol_data)
-# lm_hosp_stm <- lm(formula = hospital ~ mean_daily_stm, data = epi_stm_vol_data)
-# epi_stm_vol_data$predicted_mis_case <- round(lm_case_stm$coefficients[1] +
-#   lm_case_stm$coefficients[2] * epi_stm_vol_data$mean_daily_stm)
-# epi_stm_vol_data$predicted_mis_hosp <- round(lm_hosp_stm$coefficients[1] +
-#   lm_hosp_stm$coefficients[2] * epi_stm_vol_data$mean_daily_stm)
-# epi_stm_vol_data <- epi_stm_vol_data %>%
-#   select(recordDate,daily_case,hospital,predicted_mis_case,predicted_mis_hosp)
-# week_mis_epi_data_df <- week_mis_cum_epidata_func(epi_stm_vol_data)  # function only for mis-informed tweets.
-# 
-# week_mis_epi_data_df$gap_mis_case <- (week_mis_epi_data_df$pre_mis_case_week-week_mis_epi_data_df$daily_case_week)/week_mis_epi_data_df$daily_case_week
-# week_mis_epi_data_df$gap_mis_hosp <- (week_mis_epi_data_df$pre_mis_hosp_week-week_mis_epi_data_df$daily_hosp_week)/week_mis_epi_data_df$daily_hosp_week
-# 
-# write.csv(week_mis_epi_data_df,paste(loc,"-mis-epi-week-pre-obs-gap.csv",sep = ""))
+week_mis_indicator <- week_index_cal_func(as.Date("2020-04-18"),vol_stm_daily,epi_data)
+week_mis_indicator_df <- data.frame(
+  week_no = seq(length(week_mis_indicator$te_stm_case_week)),
+  te_stm_case = as.numeric(week_mis_indicator$te_stm_case_week),
+  te_stm_hosp = as.numeric(week_mis_indicator$te_stm_hosp_week),
+  cc_stm_case = as.numeric(week_mis_indicator$cc_stm_case_week),
+  cc_stm_hosp = as.numeric(week_mis_indicator$cc_stm_hosp_week)
+)
+write.csv(week_mis_indicator_df,paste(loc,"-mis-week-indicator.csv",sep = ""))
+
+epi_stm_vol_data <- cbind(epi_data,vol_stm_daily[,2:5])
+lm_case_stm <- lm(formula = daily_case ~ mean_daily_stm, data = epi_stm_vol_data)
+lm_hosp_stm <- lm(formula = hospital ~ mean_daily_stm, data = epi_stm_vol_data)
+epi_stm_vol_data$predicted_mis_case <- round(lm_case_stm$coefficients[1] +
+  lm_case_stm$coefficients[2] * epi_stm_vol_data$mean_daily_stm)
+epi_stm_vol_data$predicted_mis_hosp <- round(lm_hosp_stm$coefficients[1] +
+  lm_hosp_stm$coefficients[2] * epi_stm_vol_data$mean_daily_stm)
+epi_stm_vol_data <- epi_stm_vol_data %>%
+  select(recordDate,daily_case,hospital,predicted_mis_case,predicted_mis_hosp)
+week_mis_epi_data_df <- week_mis_cum_epidata_func(epi_stm_vol_data)  # function only for mis-informed tweets.
+
+week_mis_epi_data_df$gap_mis_case <- (week_mis_epi_data_df$pre_mis_case_week-week_mis_epi_data_df$daily_case_week)/week_mis_epi_data_df$daily_case_week
+week_mis_epi_data_df$gap_mis_hosp <- (week_mis_epi_data_df$pre_mis_hosp_week-week_mis_epi_data_df$daily_hosp_week)/week_mis_epi_data_df$daily_hosp_week
+
+write.csv(week_mis_epi_data_df,paste(loc,"-mis-epi-week-pre-obs-gap.csv",sep = ""))
 
 ##---- end ----
 
 ##---- 4. Added by Jie on May 20, index calculation ----
 # update for weekly index calculation by Jie on May 22
 
-week_indicator <- week_index_cal_func(as.Date("2020-04-18"),vol_stm_daily,epi_data)
+week_indicator <- week_index_cal_func(start_date_data,vol_stm_daily,epi_data)
 
 week_indicator_df <- data.frame(
   week_no = seq(length(week_indicator$te_stm_case_week)),
@@ -202,11 +223,11 @@ write.csv(week_indicator_df,paste(loc,"-week-indicator.csv",sep = ""))
 ##---- 5. Added by Jie on May 22, predicted cases and hp using Kriging ----
 # Krige data
 
-predicted_epi_data <- week_krige_func(loc,as.Date("2020-04-18"),tweet_sentiment,epi_data)
-week_krige_data_df_func(loc,as.Date("2020-04-18"),tweet_sentiment,epi_data)
+predicted_epi_data <- week_krige_func(loc,start_date_data,tweet_sentiment,epi_data)
+week_krige_data_df_func(loc,start_date_data,tweet_sentiment,epi_data)
 
-predicted_epi_data <- week_krige_func_update(as.Date("2020-04-18"),tweet_sentiment,epi_data)
-week_krige_data_df_func_update(loc,tweet_sentiment,epi_data)
+# predicted_epi_data <- week_krige_func_update(start_date_data,tweet_sentiment,epi_data)
+# week_krige_data_df_func_update(loc,tweet_sentiment,epi_data)
 
 ##---- end ----
 
@@ -257,7 +278,7 @@ case_preVSobs <- epi_week_pre_obs %>%
 case_preVSobs
 ggsave(paste(loc,"-case-preVSobs-Linear.eps",sep = ""), width = 10, height = 6.18)
 
-y <- 2.8+0.88*epi_week_pre_obs$daily_case_week
+y <- -440+1.3*epi_week_pre_obs$daily_case_week
 rmse_val <- rmse(y[2:length(y)],epi_week_pre_obs$predicted_case[2:nrow(epi_week_pre_obs)])
 
 epi_week_pre_obs %>%
@@ -292,7 +313,7 @@ hosp_preVSobs <- epi_week_pre_obs %>%
 hosp_preVSobs
 ggsave(paste(loc,"-hosp-preVSobs-Linear.eps",sep = ""), width = 10, height = 6.18)
 
-y <- 15+1.4*epi_week_pre_obs$daily_hosp_week
+y <- -8400+1.4*epi_week_pre_obs$daily_hosp_week
 rmse_val <- rmse(y[2:length(y)],epi_week_pre_obs$predicted_hosp[2:nrow(epi_week_pre_obs)])
 
 ##---- end ----

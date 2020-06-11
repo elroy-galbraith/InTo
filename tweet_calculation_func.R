@@ -1,9 +1,36 @@
 tweet_daily_vol_func <- function(rt_city){
   rt_city_daily <- rt_city %>%
-    group_by("recordDate" = as.Date(strftime(created_at,format = "%Y-%m-%d"))) %>%
-    count() %>%
+    group_by("recordDate" = as.Date(strptime(created_at,format = "%Y-%m-%d"))) %>%
+    summarise(tweetVol = n(),
+              retweetVol = mean(retweet_count,na.rm = T),
+              highest_rt_count = max(retweet_count,na.rm = T)) %>%
     ungroup()
   return(rt_city_daily)
+}
+
+retweet_vol_func <- function(rt_city){
+  retweet_daily <- rt_city %>%
+    group_by("recordDate" = as.Date(strptime(created_at,format = "%Y-%m-%d"))) %>%
+    summarise(highest_rt_count = max(retweet_count,na.rm = T),
+              poptweet = text[retweet_count == max(retweet_count,na.rm = T)]) %>%
+    ungroup() %>%
+    mutate(week_no = 1)
+  
+  start_date_rt <- retweet_daily$recordDate[1]
+  # end_date_rt <- retweet_daily$recordDate[nrow(retweet_daily)]
+  for (ii in 1:nrow(retweet_daily)) {
+    date_rt <- retweet_daily$recordDate[ii]
+    days <- as.numeric(date_rt - start_date_rt)
+    retweet_daily$week_no[ii] <- floor(days/7) + 1
+  }
+  
+  retweet_week <- retweet_daily %>%
+    group_by(week_no) %>%
+    summarise(highest_rt_count_week = max(highest_rt_count,na.rm = T),
+              poptweet_week = poptweet[highest_rt_count == max(highest_rt_count,na.rm = T)]) %>%
+    ungroup()
+  
+  return(retweet_week)
 }
 
 stm_afinn_daily_func <- function(rt_city){
@@ -137,6 +164,7 @@ week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
   # loc_coords <- lookup_coords(geoloc)  # "new delhi"
   p <- list(data.frame("x" = c(loc_coords[[2]][1], loc_coords[[2]][3]),
                        "y" = c(loc_coords[[2]][2], loc_coords[[2]][4])))
+  set.seed(1234)
   randomPoints <- data.frame("lng" = c(runif(1000, min = min(p[[1]][,1]), max = max(p[[1]][,1]))),
                              "lat" = c(runif(1000, min = min(p[[1]][,2]), max = max(p[[1]][,2]))))
   
@@ -155,6 +183,7 @@ week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
       filter(day_created >= start_date & day_created <= end_date)
     
     coordinates(tweet_sent_coords_period) <- ~lng+lat
+    tweet_sent_coords_period <- tweet_sent_coords_period[which(!duplicated(tweet_sent_coords_period@coords)),]
     if (ii == 1){
       coordinates(randomPoints) <- ~lng+lat # Can not do this repeatedly
     }
@@ -207,6 +236,7 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   # loc_coords <- lookup_coords(geoloc)  # "new delhi"
   p <- list(data.frame("x" = c(loc_coords[[2]][1], loc_coords[[2]][3]),
                        "y" = c(loc_coords[[2]][2], loc_coords[[2]][4])))
+  set.seed(1234)
   randomPoints <- data.frame("lng" = c(runif(1000, min = min(p[[1]][,1]), max = max(p[[1]][,1]))),
                              "lat" = c(runif(1000, min = min(p[[1]][,2]), max = max(p[[1]][,2]))))
   
@@ -217,7 +247,8 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   tweet_sent_coords_period <- tweet_sent_coords
   
   coordinates(tweet_sent_coords_period) <- ~lng+lat
-  # tweet_sent_coords_period <- tweet_sent_coords_period[which(!duplicated(tweet_sent_coords_period@coords)),]
+  tweet_sent_coords_period <- tweet_sent_coords_period[which(!duplicated(tweet_sent_coords_period@coords)),]
+  
   coordinates(randomPoints) <- ~lng+lat # Can not do this repeatedly
   
   lzn.kriged.stm <- autoKrige(formula = Sent ~ 1, 
@@ -347,8 +378,10 @@ week_tweet_data_func <- function(vol_stm_daily){
   }
   week_tweet_data_df <- week_tweet_data %>%
     group_by(week_no) %>%
-    summarise(vol_week = round(mean(n, na.rm = TRUE)),
-              stm_week = mean(mean_daily_stm,na.rm = TRUE)) %>%
+    summarise(tweetVol_week = round(mean(tweetVol, na.rm = TRUE)),
+              retweetVol_week = round(mean(retweetVol, na.rm = TRUE)),
+              stm_week = mean(mean_daily_stm,na.rm = TRUE),
+              highest_rt_count_week = max(highest_rt_count,na.rm = T)) %>%
     ungroup()
   
   return(week_tweet_data_df)
