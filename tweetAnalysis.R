@@ -177,31 +177,31 @@ write.csv(retweet_week,paste(loc,"-week-retweet.csv",sep = ""))
 ##---- end ----
 
 ##---- 3. Added by Jie on Jun 1, mis-index calculation ----
-week_mis_indicator <- week_index_cal_func(as.Date("2020-04-18"),vol_stm_daily,epi_data)
-week_mis_indicator_df <- data.frame(
-  week_no = seq(length(week_mis_indicator$te_stm_case_week)),
-  te_stm_case = as.numeric(week_mis_indicator$te_stm_case_week),
-  te_stm_hosp = as.numeric(week_mis_indicator$te_stm_hosp_week),
-  cc_stm_case = as.numeric(week_mis_indicator$cc_stm_case_week),
-  cc_stm_hosp = as.numeric(week_mis_indicator$cc_stm_hosp_week)
-)
-write.csv(week_mis_indicator_df,paste(loc,"-mis-week-indicator.csv",sep = ""))
-
-epi_stm_vol_data <- cbind(epi_data,vol_stm_daily[,2:5])
-lm_case_stm <- lm(formula = daily_case ~ mean_daily_stm, data = epi_stm_vol_data)
-lm_hosp_stm <- lm(formula = hospital ~ mean_daily_stm, data = epi_stm_vol_data)
-epi_stm_vol_data$predicted_mis_case <- round(lm_case_stm$coefficients[1] +
-  lm_case_stm$coefficients[2] * epi_stm_vol_data$mean_daily_stm)
-epi_stm_vol_data$predicted_mis_hosp <- round(lm_hosp_stm$coefficients[1] +
-  lm_hosp_stm$coefficients[2] * epi_stm_vol_data$mean_daily_stm)
-epi_stm_vol_data <- epi_stm_vol_data %>%
-  select(recordDate,daily_case,hospital,predicted_mis_case,predicted_mis_hosp)
-week_mis_epi_data_df <- week_mis_cum_epidata_func(epi_stm_vol_data)  # function only for mis-informed tweets.
-
-week_mis_epi_data_df$gap_mis_case <- (week_mis_epi_data_df$pre_mis_case_week-week_mis_epi_data_df$daily_case_week)/week_mis_epi_data_df$daily_case_week
-week_mis_epi_data_df$gap_mis_hosp <- (week_mis_epi_data_df$pre_mis_hosp_week-week_mis_epi_data_df$daily_hosp_week)/week_mis_epi_data_df$daily_hosp_week
-
-write.csv(week_mis_epi_data_df,paste(loc,"-mis-epi-week-pre-obs-gap.csv",sep = ""))
+# week_mis_indicator <- week_index_cal_func(as.Date("2020-04-18"),vol_stm_daily,epi_data)
+# week_mis_indicator_df <- data.frame(
+#   week_no = seq(length(week_mis_indicator$te_stm_case_week)),
+#   te_stm_case = as.numeric(week_mis_indicator$te_stm_case_week),
+#   te_stm_hosp = as.numeric(week_mis_indicator$te_stm_hosp_week),
+#   cc_stm_case = as.numeric(week_mis_indicator$cc_stm_case_week),
+#   cc_stm_hosp = as.numeric(week_mis_indicator$cc_stm_hosp_week)
+# )
+# write.csv(week_mis_indicator_df,paste(loc,"-mis-week-indicator.csv",sep = ""))
+# 
+# epi_stm_vol_data <- cbind(epi_data,vol_stm_daily[,2:5])
+# lm_case_stm <- lm(formula = daily_case ~ mean_daily_stm, data = epi_stm_vol_data)
+# lm_hosp_stm <- lm(formula = hospital ~ mean_daily_stm, data = epi_stm_vol_data)
+# epi_stm_vol_data$predicted_mis_case <- round(lm_case_stm$coefficients[1] +
+#   lm_case_stm$coefficients[2] * epi_stm_vol_data$mean_daily_stm)
+# epi_stm_vol_data$predicted_mis_hosp <- round(lm_hosp_stm$coefficients[1] +
+#   lm_hosp_stm$coefficients[2] * epi_stm_vol_data$mean_daily_stm)
+# epi_stm_vol_data <- epi_stm_vol_data %>%
+#   select(recordDate,daily_case,hospital,predicted_mis_case,predicted_mis_hosp)
+# week_mis_epi_data_df <- week_mis_cum_epidata_func(epi_stm_vol_data)  # function only for mis-informed tweets.
+# 
+# week_mis_epi_data_df$gap_mis_case <- (week_mis_epi_data_df$pre_mis_case_week-week_mis_epi_data_df$daily_case_week)/week_mis_epi_data_df$daily_case_week
+# week_mis_epi_data_df$gap_mis_hosp <- (week_mis_epi_data_df$pre_mis_hosp_week-week_mis_epi_data_df$daily_hosp_week)/week_mis_epi_data_df$daily_hosp_week
+# 
+# write.csv(week_mis_epi_data_df,paste(loc,"-mis-epi-week-pre-obs-gap.csv",sep = ""))
 
 ##---- end ----
 
