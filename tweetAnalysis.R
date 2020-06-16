@@ -15,7 +15,7 @@ source("tweet_calculation_func.R")
 source("info_cal_jidt_func.R")
 
 # Register a Google API.
-# ggmap_key <- "AIzaSyB055tAEERlsleH1Xf83-JqAa530V7roTk"
+# ggmap_key <- " " # enter google maps api key here
 # register_google(key = ggmap_key, write = TRUE)
 
 # name of Location
@@ -31,11 +31,6 @@ list_of_files <- list.files(path = paste0("./tweetData/", loc, "/"), recursive =
                             full.names = TRUE)
 
 # Read files and merge them into one file
-# tweet <- list_of_files %>%
-#   purrr::set_names(.) %>%
-#   map_df(.f = ~read_csv(file = .x), .id = "FileName") %>%
-#   select(user_id, status_id, created_at, text, retweet_count, coords_coords)
-
 tweet <- list_of_files %>%
   purrr::set_names(.) %>%
   map_df(.f = ~read_twitter_csv(file = .x), .id = "FileName") %>%
