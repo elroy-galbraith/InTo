@@ -116,7 +116,7 @@ te_cal_opt_hist_func <- function(src_data,dst_data,max_hist,knl_width){
 }
 
 week_index_cal_func <- function(start_date,tweet_data,epi_data){
-  no_week <- floor(nrow(epi_data)/7)
+  no_week <- ceiling(nrow(epi_data)/7)
   
   te_stm_case <- list()
   te_stm_hosp <- list()
@@ -124,7 +124,12 @@ week_index_cal_func <- function(start_date,tweet_data,epi_data){
   cc_stm_hosp <- list()
   
   for (ii in 1:no_week) {
-    end_date <- start_date + ii*7 - 1
+    if(ii == no_week){
+      end_date <- epi_data$recordDate[nrow(epi_data)]
+    } else {
+      end_date <- start_date + ii*7 - 1
+    }
+    
     twt_data_period <- tweet_data %>%
       filter(recordDate >= start_date & recordDate <= end_date)
     
