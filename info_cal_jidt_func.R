@@ -122,6 +122,7 @@ week_index_cal_func <- function(start_date,tweet_data,epi_data){
   te_stm_hosp <- list()
   cc_stm_case <- list()
   cc_stm_hosp <- list()
+  week_end_date_list <- list()
   
   for (ii in 1:no_week) {
     if(ii == no_week){
@@ -129,6 +130,8 @@ week_index_cal_func <- function(start_date,tweet_data,epi_data){
     } else {
       end_date <- start_date + ii*7 - 1
     }
+    
+    week_end_date_list[ii] <- list(as.Date(end_date))
     
     twt_data_period <- tweet_data %>%
       filter(recordDate >= start_date & recordDate <= end_date)
@@ -151,7 +154,8 @@ week_index_cal_func <- function(start_date,tweet_data,epi_data){
     cc_stm_hosp[ii] <- round(cor(stm_period_normal,hospital_period_normal),3)
   }
   result <- list(te_stm_case_week = te_stm_case, te_stm_hosp_week = te_stm_hosp,
-                 cc_stm_case_week = cc_stm_case, cc_stm_hosp_week = cc_stm_hosp)
+                 cc_stm_case_week = cc_stm_case, cc_stm_hosp_week = cc_stm_hosp,
+                 week_end_date = week_end_date_list)
 }
 
 

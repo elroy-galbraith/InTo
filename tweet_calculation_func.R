@@ -98,7 +98,14 @@ stm_labMT_daily_func_elroy <- function(tweet){
   ####----- Sentiment Database: labMT ------####
   tweet_stm <- unnest_tweet %>%
     # determine sentiments of words
-    inner_join(labMT) %>%
+    left_join(labMT) %>%
+    mutate(stemmed_word= ifelse(is.na(happiness_average),
+                                wordStem(word, language = "en"),
+                                "")) %>%
+    left_join(labMT, by = c("stemmed_word" = "word")) %>%
+    mutate(happiness_average = ifelse(is.na(happiness_average.x),
+                               happiness_average.y,
+                               happiness_average.x)) %>%
     # remove values in between 4 and 6 
     filter(!(4 < happiness_average & happiness_average < 6)) %>%
     ## count the number of positive and negative words per status per user
@@ -153,10 +160,12 @@ week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
   } else if (geoloc == "mumbai"){
     # geoloc <- "Bombay"
     # loc_coords <- lookup_coords(geoloc)
-    # load("mumbai_coords.RData")
-    load("Maharashtra_coords.RData")
+    load("mumbai_coords.RData")
+    # load("Maharashtra_coords.RData")
   } else if(geoloc == "new york city"){
     load("nyc_coords.RData")
+  } else if(geoloc == "myanmar"){
+    load("myanmar.RData")
   } else{
     loc_coords <- lookup_coords(geoloc)
   }
@@ -181,6 +190,12 @@ week_krige_func <- function(geoloc,start_date,tweet_sent,epi_data){
     end_date <- start_date + ii*7 - 1
     tweet_sent_coords_period <- tweet_sent_coords %>%
       filter(day_created >= start_date & day_created <= end_date)
+    
+    # ONLY for Myanmar, because the kriging prediction does not work for the 3 iteration.
+    # if (ii == 3){
+    #   tweet_sent_coords_period <- tweet_sent_coords %>%
+    #     filter(day_created >= start_date & day_created <= end_date - 2)
+    # }
     
     coordinates(tweet_sent_coords_period) <- ~lng+lat
     tweet_sent_coords_period <- tweet_sent_coords_period[which(!duplicated(tweet_sent_coords_period@coords)),]
@@ -225,10 +240,12 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   } else if (geoloc == "mumbai"){
     # geoloc <- "Bombay"
     # loc_coords <- lookup_coords(geoloc)
-    # load("mumbai_coords.RData")
-    load("Maharashtra_coords.RData")
+    load("mumbai_coords.RData")
+    # load("Maharashtra_coords.RData")
   } else if(geoloc == "new york city"){
     load("nyc_coords.RData")
+  } else if(geoloc == "myanmar"){
+    load("myanmar.RData")
   } else{
     loc_coords <- lookup_coords(geoloc)
   }
@@ -260,10 +277,11 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   
   coordinates(lzn.kriged.stm.dataframe) <- ~lng+lat
   
+  lse.sh.fit.case.automap <- autofitVariogram(input_data = tweet_sent_coords_period, formula = daily_case ~ Sent)
   lzn.kriged.case <- autoKrige(formula = daily_case ~ Sent, 
                                input_data = tweet_sent_coords_period, 
                                new_data = lzn.kriged.stm.dataframe)
-  
+  lse.sh.fit.hosp.automap <- autofitVariogram(input_data = tweet_sent_coords_period, formula = hospital ~ Sent)
   lzn.kriged.hosp <- autoKrige(formula = hospital ~ Sent, 
                                input_data = tweet_sent_coords_period, 
                                new_data = lzn.kriged.stm.dataframe)
@@ -271,8 +289,12 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   lzn.kriged.case.dataframe <- as.data.frame(lzn.kriged.case$krige_output)
   lzn.kriged.hosp.dataframe <- as.data.frame(lzn.kriged.hosp$krige_output)
   
-  write.csv(lzn.kriged.case.dataframe,paste(loc,"-kriging-data-case.csv",sep = ""))
-  write.csv(lzn.kriged.hosp.dataframe,paste(loc,"-kriging-data-hosp.csv",sep = ""))
+  png(filename = paste0(geoloc, "-hosp-semivariogram.png"))
+  plot(lse.sh.fit.hosp.automap)
+  dev.off()
+  
+  write.csv(lzn.kriged.case.dataframe,paste(geoloc,"-kriging-data-case.csv",sep = ""))
+  write.csv(lzn.kriged.hosp.dataframe,paste(geoloc,"-kriging-data-hosp.csv",sep = ""))
   
 } # has been updated as "week_krige_data_df_func_update"
 
@@ -459,4 +481,96 @@ week_mis_cum_epidata_func <- function(mis_epi_data){
   return(week_mis_epidata_cumu_df)
 }
 
+
+data_fill_by_date <- function(start_date,end_date,df_data,insert_val){
+  colnames(df_data)[1] <- "recordDate"
+  day_seq <- seq(start_date,end_date,by = "day")
+  df_data_add <- data.frame(recordDate=day_seq,c=0)
+  df_data_filled <- merge(df_data,df_data_add,by="recordDate",all=TRUE)
+  df_data_filled$c <- NULL
+  df_data_filled[is.na(df_data_filled)] <- insert_val
+  
+  return(df_data_filled)
+}
+
+
+predict_arima_func <- function(start_date,tweet_data,epi_data){
+  
+  no_week <- floor(nrow(epi_data)/7)
+  
+  week_pre_case <- list()
+  week_pre_hosp <- list()
+  week_pre_case_lower <- list()
+  week_pre_case_upper <- list()
+  week_pre_hosp_lower <- list()
+  week_pre_hosp_upper <- list()
+  
+  for (ii in 1:no_week) {
+    end_date <- start_date + ii*7 - 1
+    
+    tweet_data_weeks <- tweet_data %>%
+      filter(day_created >= start_date & day_created <= end_date)
+    epi_data_weeks <- epi_data %>%
+      filter(recordDate >= start_date & recordDate <= end_date)
+    
+    ##-- Prediction for cumulative weekly data
+    pos_case_hosp <- tweet_data_weeks %>%
+      left_join(epi_data_weeks, by = c("day_created" = "recordDate")) %>%
+      group_by(day_created) %>%
+      summarise(Positivity = mean(Sent, na.rm = T),
+                Case = mean(daily_case, na.rm = T),
+                Hospitalization = mean(hospital, na.rm = T)) %>%
+      ungroup() %>%
+      as_tsibble(index = day_created)
+    
+    # max_case <- max(pos_case_hosp$Case)
+    # max_hosp <- max(pos_case_hosp$Hospitalization)
+    # pos_case_hosp$Case <- pos_case_hosp$Case/max_case
+    # pos_case_hosp$Hospitalization <- pos_case_hosp$Hospitalization/max_hosp
+    
+    pos_model <- pos_case_hosp %>%
+      model(pos.arima = ARIMA(Positivity ~ PDQ(0,0,0))) %>%
+      forecast(h=7)
+    
+    pos_new_data <- as_tibble(pos_model) %>%
+      select(day_created, "Positivity" = .mean)  %>%
+      as_tsibble(index = day_created)
+    
+    pos_case_model <- pos_case_hosp %>%
+      model(case.arima = ARIMA(Case ~ Positivity + pdq(d=2))) %>%
+      forecast(new_data = pos_new_data)
+    
+    pos_hosp_model <- pos_case_hosp %>%
+      model(hosp.arima = ARIMA(Hospitalization ~ Positivity + pdq(d=2))) %>%
+      forecast(new_data = pos_new_data)
+    
+    pre_case_data <- pos_case_model %>%
+      hilo() %>%
+      unpack_hilo(`95%`) %>%
+      select(day_created, .mean, `95%_lower`, `95%_upper`) %>%
+      as_tibble()
+    
+    pre_hosp_data <- pos_hosp_model %>%
+      hilo() %>%
+      unpack_hilo(`95%`) %>%
+      select(day_created, .mean, `95%_lower`, `95%_upper`) %>%
+      as_tibble()
+    
+    week_pre_case[ii] <- round(mean(pre_case_data$.mean))
+    week_pre_hosp[ii] <- round(mean(pre_hosp_data$.mean))
+    
+    week_pre_case_lower[ii] <- min(pre_case_data$`95%_lower`)
+    week_pre_case_upper[ii] <- max(pre_case_data$`95%_upper`)
+    week_pre_hosp_lower[ii] <- min(pre_hosp_data$`95%_lower`)
+    week_pre_hosp_upper[ii] <- max(pre_hosp_data$`95%_upper`)
+  }
+  
+  result <- list(predicted_case_week = week_pre_case,
+                 predicted_hosp_week = week_pre_hosp,
+                 pre_case_lower = week_pre_case_lower,
+                 pre_case_upper = week_pre_case_upper,
+                 pre_hosp_lower = week_pre_hosp_lower,
+                 pre_hosp_upper = week_pre_hosp_upper)
+  return(result)
+}
 
