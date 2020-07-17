@@ -1,0 +1,372 @@
+---
+title: "InTo Walkthrough"
+output:
+  pdf_document:
+    df_print: paged
+---
+
+# Introduction
+The Infodemic Tomograph (InTo) is an infoveillance tool that enables public health officials and healthcare managers to forecast healthcare demand  given social media content during public health crises. At present, the tool presents the results of forecasting Covid-19 healthcare pressure given the positivity of text messages (tweets) from Twitter. The InTo process requires a large volume of data and is expected to be redone on a scheduled basis. This document provides a walk-through of the R code used to conduct one iteration of this process. The source code can be viewed [here](https://github.com/elroyg1/InTo) and is licensed for use under the GPL-3.0 License. 
+
+# Workflow
+The basic InTo work-flow is illustrated below. This work-flow was predicated on the granularity of data accessible to the Nexus Lab and initial objectives during the creation of the process. We were particularly interested in misinformation and healthcare, so our disaggregation of social media took only those into consideration. Epidemiological data were only available at the city scale so extracting additional features was not useful. The user can augment this process given their objectives and data. 
+
+![InTo Workflow](Fig 1 In.To. Workflow.pdf)
+
+# Setup
+Before getting started, the work environment will need to be set up properly and certain dependencies will need to be installed. Users will need to have JIDT downloaded from [here](https://github.com/jlizier/jidt/wiki/Installation) and unzipped into the working directory; we suggest downloading the full distribution instead of the git. The analyst will not need a Twitter API key thanks to the rtweet package- though having one increases the amount of data accessible to the user- but a Google Maps API key will be necessary. These, including the destination folder and location under investigation are established as part of the setup.  
+
+```{r setup, message=FALSE}
+# Set work directory, clean work environment and random seed
+setwd("C:/Users/USER/OneDrive/Desktop/InTo")
+remove(list = ls())
+set.seed(12345)
+
+# For this workbook
+library(knitr)
+# For downloading twitter data
+library(tidyverse)
+library(lubridate)
+library(rtweet)
+# For analyzing twitter data
+library(qdap)
+library(tidytext)
+library(SnowballC)
+# For using the JIDT package
+library("rJava")
+# For conducting the time series forecasts
+library(tsibble)
+library(fable)
+library(fabletools)
+# For conducting geo-statistical kriging
+library(sp)
+library(automap)
+
+opts_chunk$set(echo = T, message=F, error=F, warning=F)
+
+# Set the location of interest here
+loc <- "bangkok"
+
+# Set folder path here
+folder.path <- paste0("./tweetData/", loc, "/")
+
+```
+
+# Load Data
+The beginning of the process involves acquiring the necessary data. 
+
+```{r Load, include=FALSE}
+
+# List the files of csvs
+list_of_files <- list.files(path = paste0("./tweetData/", loc, "/"), recursive = TRUE,
+                            pattern = "\\.csv", 
+                            full.names = TRUE)
+
+# Read files and merge them into one file
+tweet <- list_of_files %>%
+  purrr::set_names(.) %>%
+  map_df(.f = ~read_twitter_csv(file = .x), .id = "FileName") %>%
+  select(user_id, status_id, created_at, text, retweet_count, coords_coords)
+
+epi_data <- read.csv("./epiData/bangkok-epi-data.csv") %>%
+  mutate(recordDate = as.Date(recordDate),
+         new_hosp = order_by(recordDate, hospital - lag(hospital))) %>%
+  select(-c(X, hospital))
+
+```
+
+## Load twitter Data
+The rTweet package returns the endpoints provided by Twitter's API so see [here](https://developer.twitter.com/en/docs/tweets/data-dictionary/overview/tweet-object) for a full description of the data returned. For our purposes, we retain an n x 6 table where n is a tweet. Each row represents an entry for that tweet and the columns we retain are user_id, status_id, created_at, text, retweet_count, and coords_coords.``
+
+```{r}
+
+glimpse(tweet)
+
+```
+
+## Epidemiological data
+
+The Epidemiological data used by InTo are daily cases and hospitalizations. This data can be optained from any reliable and reputable source the user decides. It should be in a n x 3 table where n is the number of days. The three columns are Date (YYYY-MM-DD); Cases (daily new cases) and Hospitalization (daily new hospitalization). Each row represents an entry for that date. Spatio-temporal granularity is preferred and would necessitate the inclusion of a coordinates column, however, here we one metric for pixel, rather than several values distributed within that pixel. 
+
+```{r}
+
+glimpse(epi_data)
+
+```
+# Disaggregate Data
+At this point in the work-flow the user will disaggregate the data into the subsets of interest. 
+
+## Twitter Data
+Twitter data is disaggregated into three sets: all tweets, misinformation and health care. Healthcare and misinformation tweets are identified by identifying those messages that contain certain key terms or phrases. These can be changed to whatever the user feels is most appropriate. Any other subset can be created by identifying the key terms and filtering the main dataset in a manner as shown below. 
+```{r}
+all_tweets <-  tweet
+
+misinfo_term <- "fake|misinformation|^''lie|false"
+health_term <- "healthcare|hospital|test"
+
+misinfo_tweets <-  tweet %>%
+  filter(str_detect(text, misinfo_term))
+
+health_tweets <- tweet %>%
+  filter(str_detect(text, health_term))
+```
+
+Epidemiological data tends to already be disaggregated in cases and hospitalization. Nonetheless, the user may be interested in cases or hospitalization of specific groups, such as females, the poor, tourists or some other group. This is not yet implemented but is quite possible if the specifications exist within the epidemiological to allow for such subsetting.
+
+# Analyze Data
+## Extract Features
+### Twitter data
+The main features of interest for the social media data are: n-grams (bi-grams), sentiments (affects and positivity), and metadata (volume, popularity). For emotions, the textdata package will need to be installed. 
+
+To begin, the text data must be preprocessed and tokenized. Here we use the tidytext package to replace abbreviations, symbols contractions and ordinals before separating each text into its constituent words. The InTo process takes a bag-of-words approach to sentiment quantification so we do not cnosider the order of words important. 
+
+To measure the positivity we used the labMT lexicon as employed [here](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0026752). This lexical approach involves matching words in the text against words in the lexicon that contains quantification of its positivity. We first match the words as they appear then stem the words and attempt quanitification again. This last step is useful as sometimes a word, like viruses, may not have a value, but its stem, like virus, will. The InTo process only uses positivity but the user may be interested in the distribution of emotional affects in the text as well. The lexical approach is also used to determine the emotional affects associated with each word.
+
+```{r}
+
+unnest_tweet <- all_tweets %>%
+  mutate(text = replace_abbreviation(text) %>% 
+           replace_symbol() %>%
+           replace_contraction() %>%
+           replace_ordinal()) %>%
+  unnest_tokens("word", "text", token = "tweets", strip_punct = T, strip_url = T)
+
+####----- Sentiment Database: labMT ------####
+tweet_sentiment <- unnest_tweet %>%
+  # determine sentiments of words
+  left_join(labMT) %>%
+  mutate(stemmed_word = ifelse(is.na(happiness_average),
+                               wordStem(word, language = "en"),
+                               "")) %>%
+  left_join(labMT, by = c("stemmed_word" = "word")) %>%
+  mutate(positivity = ifelse(is.na(happiness_average.x),
+                             happiness_average.y,
+                             happiness_average.x)) %>%
+  # remove values in between 4 and 6 
+  filter(!(4 < positivity & positivity < 6)) %>%
+  ## count the number of positive and negative words per status per user
+  group_by(user_id, status_id, coords_coords, 
+           "day_created" = strftime(created_at, format = "%Y-%m-%d")) %>%
+  summarise(Sent = mean(positivity, na.rm = T)) %>%
+  ungroup() %>%
+  separate(col = "coords_coords", into = c("lng", "lat"), sep = " ") %>%
+  mutate(lng = as.numeric(lng),
+         lat = as.numeric(lat),
+         day_created = as.Date(day_created))
+
+glimpse(tweet_sentiment)
+
+tweetBigrams <- all_tweets %>%
+  mutate(text = rm_twitter_url(text) %>%
+           str_remove_all(pattern = "[:punct:]") %>%
+           str_remove_all(pattern = "[:digit:]")) %>%
+  unnest_tokens("word", "text", token = "ngrams", n = 2) %>%
+  separate(col = word, into = c("word1", "word2"), sep = " ") %>%
+  filter(!(word1 %in% c(stop_words$word, "coronavirus", "covid19",
+                        "#covid19", "#coronavirus", "#covid2019", 
+                        "amp", "covid", "-", "|", "19"))) %>%
+  filter(!(word2 %in% c(stop_words$word, "coronavirus", "covid19",
+                        "#covid19", "#coronavirus", "#covid2019", 
+                        "amp", "covid", "-", "|", "19"))) %>%
+  unite(col = "pairs", c(word1, word2), sep = " ") %>%
+  group_by("date_created" = as.Date(created_at), pairs) %>%
+  count() %>%
+  ungroup()
+
+glimpse(tweetBigrams)
+
+tweetEmotions <- unnest_tweet %>%
+  inner_join(get_sentiments("nrc")) %>%
+  group_by("day_created" = strftime(created_at, format = "%Y-%m-%d"),
+           sentiment) %>%
+  count() %>%
+  ungroup()
+
+glimpse(tweetEmotions)
+
+```
+## Quantify Relationships
+### Correlation and Divergence
+This next step involves calculating the correlation and transfer entropy between positivity and epidemiological data. Correlation will quantify the nature and strength of the linear atemporal relationship between the variables. Transfer entropy from positivity to epidemiological data will quantify the divergence between the two time series serving as a measure of the predictability of positivity for hospitalization and cases. The code below will normalize positivity, cases and hospitalizations and use those normalized values in the calculate the correlation coefficient and transfer entropy from positivity to epidemiological data.   
+
+```{r}
+
+.jinit()
+
+# Change location of jar to match yours:
+.jaddClassPath("./infodynamics-dist-1.5/infodynamics.jar")
+
+teCal_jidt_knl_func <- function(srcArr,dstArr,histLen,width){
+  # histLen: 1L as an example; width: 0.5 as an example
+  # Create a TE calculator and run it:
+  teCalc<-.jnew("infodynamics/measures/continuous/kernel/TransferEntropyCalculatorKernel")
+  .jcall(teCalc,"V","setProperty", "NORMALISE", "true") # Normalise the individual variables
+  .jcall(teCalc,"V","initialise", histLen, width) # Use history length 1 (Schreiber k=1), kernel width of 0.5 normalised units
+  .jcall(teCalc,"V","setObservations", srcArr, dstArr)
+  # For copied source, should give something close to expected value for correlated Gaussians:
+  result <- .jcall(teCalc,"D","computeAverageLocalOfObservations") # bit
+  
+  return(result)
+}
+
+miCal_jidt_func_lag <- function(srcArr,dstArr,time_lag){
+  # time_lag: string -> "1" or "2"
+  # different calculators JIDT provides (select one of them!):
+  #  implementingClass <- "infodynamics/measures/continuous/kraskov/MutualInfoCalculatorMultiVariateKraskov1" # MI([1,2], [3,4]) = 0.36353
+  implementingClass <- "infodynamics/measures/continuous/kernel/MutualInfoCalculatorMultiVariateKernel"
+  #  implementingClass <- "infodynamics/measures/continuous/gaussian/MutualInfoCalculatorMultiVariateGaussian"
+  # implementingClass <- "infodynamics/measures/continuous/kraskov/MutualInfoCalculatorMultiVariateKraskov1"
+  miCalc<-.jnew(implementingClass)
+  
+  .jcall(miCalc,"V","setProperty", "TIME_DIFF", time_lag)
+  
+  # a. Initialise the calculator to use the required number of
+  #   dimensions for each variable:
+  .jcall(miCalc,"V","initialise")
+  
+  # b. Supply the observations to compute the PDFs from:
+  .jcall(miCalc,"V","setObservations",srcArr,dstArr)
+  
+  # c. Make the MI calculation:
+  result <- .jcall(miCalc,"D","computeAverageLocalOfObservations")  # bit
+  return(result)
+}
+
+opt_lag4mi_func <- function(srcArr,dstArr,max_lag){
+  opt_lag <- 0
+  opt_mi  <- miCal_jidt_func_lag(srcArr,dstArr,as.character(opt_lag))
+  for (i in seq(max_lag)) {
+    mi <- miCal_jidt_func_lag(srcArr,dstArr,as.character(i))
+    if(mi>opt_mi){
+      opt_mi <- mi
+      opt_lag <- i
+    } else {
+      next
+    }
+  }
+  if(opt_lag == 0){
+    # since the time lag for TE calculaton can not be zero.
+    # if zero, it reports an error saying "source index -1 out of bounds for double[]"
+    opt_lag <- 1
+  }
+  result_list <- list(opt_lag = opt_lag,max_mi = opt_mi)
+  return(result_list)
+}
+
+te_cal_opt_hist_func <- function(src_data,dst_data,max_hist,knl_width){
+  te_value <- teCal_jidt_knl_func(src_data,dst_data,
+                                  as.integer(opt_lag4mi_func(src_data,dst_data,max_hist)$opt_lag),
+                                  knl_width)
+  return(te_value)
+}
+
+pos_epi <- tweet_sentiment %>%
+  left_join(epi_data, by = c("day_created" = "recordDate")) %>%
+  mutate(norm_sent = (Sent-min(tweet_sentiment$Sent,na.rm = T))/(max(tweet_sentiment$Sent,na.rm = T)-min(tweet_sentiment$Sent,na.rm = T)),
+         norm_hosp = (new_hosp-min(epi_data$new_hosp,na.rm = T))/(max(epi_data$new_hosp,na.rm = T)-min(epi_data$new_hosp,na.rm = T)),
+         norm_case = (daily_case-min(epi_data$daily_case,na.rm = T))/(max(epi_data$daily_case,na.rm = T)-min(epi_data$daily_case, na.rm = T))) %>%
+  ungroup() %>%
+  summarise(
+    pos_case_cor = cor(x = norm_sent, y = norm_case, use = "complete.obs"),
+    pos_hosp_cor = cor(y = norm_hosp, x = norm_sent, use = "complete.obs"),
+    pos_case_te = te_cal_opt_hist_func(src_data = norm_sent, dst_data = norm_case,
+                                       max_hist = 1L, knl_width = 0.5),
+    pos_hosp_te = te_cal_opt_hist_func(src_data = norm_sent, dst_data = norm_hosp, 
+                                       max_hist = 1L, knl_width = 0.5)
+  )
+
+glimpse(pos_epi)
+```
+
+### Temporal Forecast
+Here we employ an ARIMA model to forecast the daily hospitalizations and cases given the tweet positivity. The urca package will need to be installed. We forecast hospitalization and cases based on their individual histories and relationship to positivity. Caluclated the forecasted values using the fable package re This set of code first forecasts positivity given its autocorrelation. This code also extracts the upper and lower limits of the forecasted values.
+
+```{r}
+
+# Combine positivity data and epidemiological data and convert to a time series
+pos_epi_ts <- tweet_sentiment %>%
+  left_join(epi_data, by = c("day_created" = "recordDate")) %>%
+  group_by(day_created) %>%
+  summarise(positivity = mean(Sent, na.rm = T),
+            hospitalization = mean(new_hosp, na.rm = T),
+            cases = mean(daily_case, na.rm = T)) %>%
+  ungroup() %>%
+  filter(day_created <= ymd("2020-07-01")) %>%
+  as_tsibble(index = day_created)
+
+# Forecast positivity given its autocorrelation
+pos_fcast <- pos_epi_ts %>%
+  model(pos.arima = ARIMA(positivity)) %>%
+  forecast(h = 14)
+
+# Store the forecasted positivity as a time series for later use
+newdata_pos <- as_tibble(pos_fcast) %>%
+  select(day_created, "positivity" = .mean) %>%
+  as_tsibble(index = day_created)
+
+# Forecast hospitalization given its history and relationship to positivity
+pos_hosp_fcast <- pos_epi_ts %>%
+  model(arima.auto = ARIMA(hospitalization ~ positivity)) %>%
+  forecast(new_data = newdata_pos)
+
+hosp_fcast_data <- pos_hosp_fcast %>%
+  hilo() %>%
+  unpack_hilo(c(`80%`, `95%`)) %>%
+  select(day_created, "hosp_fcast" = .mean, 
+            `80%_lower`, `80%_upper`, `95%_lower`, `95%_upper`) %>%
+  as_tibble()
+
+glimpse(hosp_fcast_data)
+
+pos_case_fcast <- pos_epi_ts %>%
+  model(arima.auto = ARIMA(cases ~ positivity)) %>%
+  forecast(new_data = newdata_pos)
+
+case_fcast_data <- pos_case_fcast %>%
+  hilo() %>%
+  unpack_hilo(c(`80%`, `95%`)) %>%
+  select(day_created, "hosp_fcast" = .mean, 
+            `80%_lower`, `80%_upper`, `95%_lower`, `95%_upper`) %>%
+  as_tibble()
+
+glimpse(case_fcast_data)
+```
+
+### Spatial Forecast
+Now we can use geostatistical kriging to forecast the spatial spread of hospitalization given the positivity. 
+```{r}
+
+loc_pos_epi <- tweet_sentiment %>%
+  left_join(epi_data, by = c("day_created" = "recordDate")) %>%
+  na.omit() %>%
+  distinct()
+
+coordinates(loc_pos_epi) <- ~lat+lng
+loc_pos_epi <- loc_pos_epi[which(!duplicated(loc_pos_epi@coords)),]
+
+bbox <- lookup_coords(loc)
+
+random_points <- data.frame("lng" = c(runif(10000, min = bbox$box[1], max = bbox$box[3])),
+                            "lat" = c(runif(10000, min = bbox$box[2], max = bbox$box[4])))
+
+coordinates(random_points) <- ~lat+lng
+
+krige_pos <- autoKrige(formula = Sent ~ 1,
+                       input_data = loc_pos_epi,
+                       new_data = random_points)
+
+krige_pos_output <- krige_pos$krige_output %>%
+  as.data.frame() %>%
+  rename("Sent" = var1.pred)
+
+coordinates(krige_pos_output) <- ~lat+lng
+
+krige_hosp <- autoKrige(formula = new_hosp ~ Sent, 
+                        input_data = loc_pos_epi, 
+                        new_data = krige_pos_output)
+
+krige_hosp_output <- krige_hosp$krige_output %>%
+  as.data.frame() %>%
+  rename("Sent" = var1.pred)
+
+```
