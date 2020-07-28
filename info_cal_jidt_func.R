@@ -6,11 +6,13 @@ library("rJava")
 #   in R (e.g. with setwd()) to the location of this file (i.e. demos/r) !!
 .jaddClassPath("/home/lijie/twitterData/infodynamics-dist-1.5/infodynamics.jar")
 
-teCal_jidt_ksg_func <- function(srcArr,dstArr,k,histLen){
+teCal_jidt_ksg_func <- function(srcArr,dstArr,t_lag,k,histLen){
   # k: "4" as an example; histLen: 1L as an example
   # Create a TE calculator:
   teCalc<-.jnew("infodynamics/measures/continuous/kraskov/TransferEntropyCalculatorKraskov")
-  .jcall(teCalc,"V","setProperty", "k", k) # Use Kraskov parameter K=4 for 4 nearest points
+  .jcall(teCalc,"V","setProperty", "DELAY", t_lag) # specify the time lag for TE calculation
+  .jcall(teCalc,"V","setProperty", "k", k) # Use Kraskov parameter K nearest points
+  
   
   # Perform calculation with correlated source:
   .jcall(teCalc,"V","initialise", histLen) # Use history length 1 (Schreiber k=1)
@@ -57,7 +59,7 @@ miCal_jidt_func <- function(srcArr,dstArr){
 miCal_jidt_func_lag <- function(srcArr,dstArr,time_lag){
   # time_lag: string -> "1" or "2"
   # different calculators JIDT provides (select one of them!):
-  #  implementingClass <- "infodynamics/measures/continuous/kraskov/MutualInfoCalculatorMultiVariateKraskov1" # MI([1,2], [3,4]) = 0.36353
+  # implementingClass <- "infodynamics/measures/continuous/kraskov/MutualInfoCalculatorMultiVariateKraskov1" # MI([1,2], [3,4]) = 0.36353
   implementingClass <- "infodynamics/measures/continuous/kernel/MutualInfoCalculatorMultiVariateKernel"
   #  implementingClass <- "infodynamics/measures/continuous/gaussian/MutualInfoCalculatorMultiVariateGaussian"
   # implementingClass <- "infodynamics/measures/continuous/kraskov/MutualInfoCalculatorMultiVariateKraskov1"
@@ -82,7 +84,9 @@ opt_lag4mi_func <- function(srcArr,dstArr,max_lag){
   opt_mi  <- miCal_jidt_func_lag(srcArr,dstArr,as.character(opt_lag))
   for (i in seq(max_lag)) {
     mi <- miCal_jidt_func_lag(srcArr,dstArr,as.character(i))
-    if(mi>opt_mi){
+    if (is.na(mi) | is.na(opt_mi)){
+      opt_lag <- 1
+    }else if(mi>opt_mi){
       opt_mi <- mi
       opt_lag <- i
     } else {
@@ -115,6 +119,19 @@ te_cal_opt_hist_func <- function(src_data,dst_data,max_hist,knl_width){
   return(te_value)
 }
 
+te_cal_opt_lag_func <- function(src_data,dst_data,max_t_lag,k,histLen,knl_width){
+  te_value <- try(teCal_jidt_ksg_func(src_data,dst_data,
+                                  as.character(opt_lag4mi_func(src_data,dst_data,max_t_lag)$opt_lag),
+                                  as.character(k),histLen),silent = T)
+  if ("try-error" %in% class(te_value)){
+    te_value <- teCal_jidt_knl_func(src_data,dst_data,histLen,knl_width)
+  } else {
+    print("TE is calculated by KSG with optimal lag.")
+  }
+  
+  return(te_value)
+}
+
 week_index_cal_func <- function(start_date,tweet_data,epi_data){
   no_week <- ceiling(nrow(epi_data)/7)
   
@@ -142,14 +159,23 @@ week_index_cal_func <- function(start_date,tweet_data,epi_data){
     epi_data_period <- epi_data %>%
       filter(recordDate >= start_date & recordDate <= end_date)
     daily_period <- epi_data_period$daily_case
-    hospital_period <- epi_data_period$hospital
+    new_hospital_period <- epi_data_period$daily_new_hosp
+    # hospital_period <- epi_data_period$hospital
     daily_period_normal <- normalization_func(daily_period)
-    hospital_period_normal <- normalization_func(hospital_period)
+    hospital_period_normal <- normalization_func(new_hospital_period)
     
-    max_hist <- 5
+    # max_hist <- 5L
+    # knl_width <- 0.5
+    # te_stm_case[ii] <- te_cal_opt_hist_func(stm_period_normal,daily_period_normal,max_hist,knl_width)
+    # te_stm_hosp[ii] <- te_cal_opt_hist_func(stm_period_normal,hospital_period_normal,max_hist,knl_width)
+    
+    max_time_lag <- 5L
+    hist_len <- 1L
+    k_nearest <- 4L
     knl_width <- 0.5
-    te_stm_case[ii] <- te_cal_opt_hist_func(stm_period_normal,daily_period_normal,max_hist,knl_width)
-    te_stm_hosp[ii] <- te_cal_opt_hist_func(stm_period_normal,hospital_period_normal,max_hist,knl_width)
+    te_stm_case[ii] <- te_cal_opt_lag_func(stm_period_normal,daily_period_normal,max_time_lag,k_nearest,hist_len,knl_width)
+    te_stm_hosp[ii] <- te_cal_opt_lag_func(stm_period_normal,hospital_period_normal,max_time_lag,k_nearest,hist_len,knl_width)
+    
     cc_stm_case[ii] <- round(cor(stm_period_normal,daily_period_normal),3)
     cc_stm_hosp[ii] <- round(cor(stm_period_normal,hospital_period_normal),3)
   }

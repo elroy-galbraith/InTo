@@ -144,7 +144,7 @@ data_period_func <- function(rt_data,start_date,end_date){
 }
 
 normalization_func <- function(x){
-  nml_x = (x-min(x))/(max(x)-min(x))
+  nml_x = x/max(x,na.rm = T)
   return(nml_x)
 }
 
@@ -233,22 +233,46 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   # save the kriging data in csv files.
   # population_ratio <- 1
   
+  hist_week_len <- 0
   if (geoloc == "delhi"){
     # geoloc <- "new delhi"
     # loc_coords <- lookup_coords(geoloc)
-    load("Delhi_coords.RData")
+    load("delhi_metro.RData")
+    hist_week_len <- 2
   } else if (geoloc == "mumbai"){
     # geoloc <- "Bombay"
     # loc_coords <- lookup_coords(geoloc)
-    load("mumbai_coords.RData")
+    load("mumbai_metro.RData")
+    hist_week_len <- 2
     # load("Maharashtra_coords.RData")
   } else if(geoloc == "new york city"){
     load("nyc_coords.RData")
+    hist_week_len <- 0
   } else if(geoloc == "myanmar"){
     load("myanmar.RData")
+    hist_week_len <- 0
+  } else if (geoloc == "jakarta"){
+    load("jakarta_metro.RData")
+    hist_week_len <- 0
+  } else if(geoloc == "bangkok"){
+    load("bangkok_metro.RData")
+    hist_week_len <- 0
   } else{
-    loc_coords <- lookup_coords(geoloc)
+    print("please check the location!")
   }
+  
+  end_date <- epi_data$recordDate[nrow(epi_data)]
+  if (hist_week_len == 0){
+    hist_since_date <- start_date
+  } else {
+    hist_since_date <- end_date-hist_week_len*7+1
+  }
+  
+  tweet_sent_period <- tweet_sent %>%
+    filter(day_created >= hist_since_date)
+  
+  epi_data_period <- epi_data %>%
+    filter(recordDate >= hist_since_date)
   
   # loc_coords <- lookup_coords(geoloc)  # "new delhi"
   p <- list(data.frame("x" = c(loc_coords[[2]][1], loc_coords[[2]][3]),
@@ -257,8 +281,8 @@ week_krige_data_df_func <- function(geoloc,start_date,tweet_sent,epi_data){
   randomPoints <- data.frame("lng" = c(runif(1000, min = min(p[[1]][,1]), max = max(p[[1]][,1]))),
                              "lat" = c(runif(1000, min = min(p[[1]][,2]), max = max(p[[1]][,2]))))
   
-  tweet_sent_coords <- tweet_sent %>%
-    left_join(epi_data, by = c("day_created" = "recordDate")) %>%
+  tweet_sent_coords <- tweet_sent_period %>%
+    left_join(epi_data_period, by = c("day_created" = "recordDate")) %>%
     na.omit()
   
   tweet_sent_coords_period <- tweet_sent_coords
@@ -377,7 +401,8 @@ week_epi_data_func <- function(epi_data){
   week_epi_data_df <- week_epi_data %>%
     group_by(week_no) %>%
     summarise(daily_case_week = round(mean(daily_case, na.rm = TRUE)),
-              daily_hosp_week = round(mean(hospital,na.rm = TRUE))) %>%
+              daily_hosp_week = round(mean(hospital,na.rm = TRUE)),
+              daily_new_hosp_week = round(mean(daily_new_hosp,na.rm = TRUE))) %>%
     ungroup()
   
   return(week_epi_data_df)
@@ -425,12 +450,14 @@ week_epidata_cumulative_func <- function(epi_data){
     }
     daily_case_week[ii] <- round(mean(epi_data$daily_case[1:end_index]))
     daily_hosp_week[ii] <- round(mean(epi_data$hospital[1:end_index]))
+    daily_new_hosp_week[ii] <- round(mean(epi_data$daily_new_hosp[1:end_index]))
   }
   
   week_epidata_cumu_df <- data.frame(
     week_no = seq(no_week),
     daily_case_week,
-    daily_hosp_week
+    daily_hosp_week,
+    daily_new_hosp_week
   )
   
   return(week_epidata_cumu_df)
@@ -481,6 +508,34 @@ week_mis_cum_epidata_func <- function(mis_epi_data){
   return(week_mis_epidata_cumu_df)
 }
 
+week_mis_epidata_func <- function(mis_epi_data){
+  
+  no_week <- ceiling(nrow(mis_epi_data)/7)
+  week_epi_data <- mis_epi_data %>%
+    mutate(week_no = 1)
+  for (ii in 1:no_week) {
+    start_index <- (ii-1)*7 + 1
+    if(ii < no_week){
+      end_index <- start_index + 6
+    } else{
+      end_index <- nrow(mis_epi_data)
+    }
+    
+    week_epi_data$week_no[start_index:end_index] <- ii
+  }
+  week_epi_data_df <- week_epi_data %>%
+    group_by(week_no) %>%
+    summarise(daily_case_week = round(mean(daily_case, na.rm = TRUE)),
+              daily_hosp_week = round(mean(hospital,na.rm = TRUE)),
+              daily_new_hosp_week = round(mean(daily_new_hosp,na.rm = TRUE)),
+              pre_mis_case_week = round(mean(predicted_mis_case,na.rm = TRUE)),
+              pre_mis_hosp_week = round(mean(predicted_mis_hosp,na.rm = TRUE))) %>%
+    ungroup()
+  
+  return(week_epi_data_df)
+  
+}
+
 
 data_fill_by_date <- function(start_date,end_date,df_data,insert_val){
   colnames(df_data)[1] <- "recordDate"
@@ -495,6 +550,8 @@ data_fill_by_date <- function(start_date,end_date,df_data,insert_val){
 
 
 predict_arima_func <- function(start_date,tweet_data,epi_data){
+  
+  ## return average predicted results.
   
   no_week <- floor(nrow(epi_data)/7)
   
@@ -519,7 +576,8 @@ predict_arima_func <- function(start_date,tweet_data,epi_data){
       group_by(day_created) %>%
       summarise(Positivity = mean(Sent, na.rm = T),
                 Case = mean(daily_case, na.rm = T),
-                Hospitalization = mean(hospital, na.rm = T)) %>%
+                Hospitalization = mean(hospital, na.rm = T),
+                DailyNewHosp = mean(daily_new_hosp, na.rm = T)) %>%
       ungroup() %>%
       as_tsibble(index = day_created)
     
@@ -529,7 +587,7 @@ predict_arima_func <- function(start_date,tweet_data,epi_data){
     # pos_case_hosp$Hospitalization <- pos_case_hosp$Hospitalization/max_hosp
     
     pos_model <- pos_case_hosp %>%
-      model(pos.arima = ARIMA(Positivity ~ PDQ(0,0,0))) %>%
+      model(pos.arima = ARIMA(Positivity)) %>%
       forecast(h=7)
     
     pos_new_data <- as_tibble(pos_model) %>%
@@ -537,11 +595,11 @@ predict_arima_func <- function(start_date,tweet_data,epi_data){
       as_tsibble(index = day_created)
     
     pos_case_model <- pos_case_hosp %>%
-      model(case.arima = ARIMA(Case ~ Positivity + pdq(d=2))) %>%
+      model(case.arima = ARIMA(Case ~ Positivity)) %>%
       forecast(new_data = pos_new_data)
     
     pos_hosp_model <- pos_case_hosp %>%
-      model(hosp.arima = ARIMA(Hospitalization ~ Positivity + pdq(d=2))) %>%
+      model(hosp.arima = ARIMA(DailyNewHosp ~ Positivity)) %>%
       forecast(new_data = pos_new_data)
     
     pre_case_data <- pos_case_model %>%
@@ -574,3 +632,74 @@ predict_arima_func <- function(start_date,tweet_data,epi_data){
   return(result)
 }
 
+
+predict_arima_daily_func <- function(start_date,tweet_data,epi_data){
+  
+  ## return each daily predicted result.
+  
+  no_week <- floor(nrow(epi_data)/7)
+  
+  pre_daily_case_hosp <- data.frame(pre_date = as.Date("2020-01-01"),
+                                    pre_daily_case = 0,
+                                    pre_daily_hosp = 0) # initialize a data frame
+  
+  for (ii in 1:no_week) {
+    end_date <- start_date + ii*7 - 1
+    
+    tweet_data_weeks <- tweet_data %>%
+      filter(day_created >= start_date & day_created <= end_date)
+    epi_data_weeks <- epi_data %>%
+      filter(recordDate >= start_date & recordDate <= end_date)
+    
+    ##-- Prediction for cumulative weekly data
+    pos_case_hosp <- tweet_data_weeks %>%
+      left_join(epi_data_weeks, by = c("day_created" = "recordDate")) %>%
+      group_by(day_created) %>%
+      summarise(Positivity = mean(Sent, na.rm = T),
+                Case = mean(daily_case, na.rm = T),
+                Hospitalization = mean(hospital, na.rm = T),
+                DailyNewHosp = mean(daily_new_hosp, na.rm = T)) %>%
+      ungroup() %>%
+      as_tsibble(index = day_created)
+    
+    pos_model <- pos_case_hosp %>%
+      model(pos.arima = ARIMA(Positivity)) %>%
+      forecast(h=7)
+    
+    pos_new_data <- as_tibble(pos_model) %>%
+      select(day_created, "Positivity" = .mean)  %>%
+      as_tsibble(index = day_created)
+    
+    pos_case_model <- pos_case_hosp %>%
+      model(case.arima = ARIMA(Case ~ Positivity)) %>%
+      forecast(new_data = pos_new_data)
+    
+    pos_hosp_model <- pos_case_hosp %>%
+      model(hosp.arima = ARIMA(DailyNewHosp ~ Positivity)) %>%
+      forecast(new_data = pos_new_data)
+    
+    pre_case_data <- pos_case_model %>%
+      hilo() %>%
+      unpack_hilo(`95%`) %>%
+      select(day_created, .mean, `95%_lower`, `95%_upper`) %>%
+      as_tibble()
+    
+    pre_hosp_data <- pos_hosp_model %>%
+      hilo() %>%
+      unpack_hilo(`95%`) %>%
+      select(day_created, .mean, `95%_lower`, `95%_upper`) %>%
+      as_tibble()
+    
+    # week_pre_case[ii] <- round(mean(pre_case_data$.mean))
+    # week_pre_hosp[ii] <- round(mean(pre_hosp_data$.mean))
+    
+    pre_daily_case_hosp_step <- data.frame(
+      pre_date = seq(end_date+1,end_date+7,by="day"),
+      pre_daily_case = round(pre_case_data$.mean),
+      pre_daily_hosp = round(pre_hosp_data$.mean)
+    )
+    pre_daily_case_hosp <- rbind(pre_daily_case_hosp,pre_daily_case_hosp_step)
+  }
+  pre_daily_case_hosp <- pre_daily_case_hosp[2:nrow(pre_daily_case_hosp),]
+  return(pre_daily_case_hosp)
+}
