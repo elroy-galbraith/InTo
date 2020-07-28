@@ -436,11 +436,8 @@ unnest_tweet <- tweet %>%
 
 topBigrams <- tweet %>%
   mutate(text = rm_twitter_url(text) %>%
-           replace_abbreviation() %>% 
-           replace_symbol() %>%
-           replace_contraction() %>%
-           replace_ordinal() %>%
-           replace_number()) %>%
+           str_remove_all(pattern = "[:punct:]") %>%
+           str_remove_all(pattern = "[:digit:]")) %>%
   unnest_tokens("word", "text", token = "ngrams", n = 2) %>%
   separate(col = word, into = c("word1", "word2"), sep = " ") %>%
   filter(!(word1 %in% c(stop_words$word, "coronavirus", "covid19", 
@@ -455,6 +452,14 @@ topBigrams <- tweet %>%
   # change n to whatever number required
   top_n(n = 30, wt = n) %>%
   ungroup()
+
+# top tweets and tweets
+topTweets <- tweet %>%
+  group_by("day_created" = strftime(created_at, format = "%Y-%m-%d")) %>%
+  top_n(5,retweet_count) %>%
+  ungroup()
+
+write.csv(topTweets, "./data/topTweets.csv")
 
 # sentiment valence
 tweet_sentiment <- unnest_tweet %>%
@@ -546,10 +551,10 @@ tweet_sentiment_plot <- tweet_sentiment %>%
   summarise(nTweets = n_distinct(status_id),
             meanSent = mean(Sent, na.rm = T)) %>%
   ungroup() %>%
-  ggplot(aes(x = as.Date(day_created), y = nTweets, color = meanSent, group = 1)) +
+  ggplot(aes(x = as.Date(day_created), y = meanSent, color = nTweets, group = 1)) +
   geom_line(size = 1, color = "black") +
   geom_point(size = 3) +
-  labs(x = "Date", y = "Mean Daily Tweets", color = "Mean Happiness",
+  labs(x = "Date", y = "Mean Positivity", color = "Mean Daily Tweets",
        title = "New Delhi") +
   tweetPlotTheme
 
@@ -584,6 +589,9 @@ hosp_data <- read.csv("https://raw.githubusercontent.com/imdevskp/covid-19-india
   ungroup() %>%
   mutate(Date = lubridate::dmy(date_announced))
 
+hosp_data2 <- read.csv("https://raw.githubusercontent.com/imdevskp/covid-19-india-data/master/complete.csv") %>%
+  filter(`Name.of.State...UT` == "Delhi" )
+
 hosp_weekly <- hosp_data %>%
   group_by("week" = lubridate::week(Date)) %>%
   summarise(hosp_week = sum(n)) %>%
@@ -597,6 +605,8 @@ hospBysent <- tweet_sentiment %>%
   summarise(hosp = mean(n, na.rm = T)/22961, 
             meanSent = mean(Sent, na.rm = T)) %>%
   ungroup()
+
+
 
 hospBysent_plot <- hospBysent  %>%
   ggplot(aes(x = hosp, y = meanSent)) +
@@ -705,7 +715,7 @@ tweetSentMap <- tweet_sentiment %>%
   summarise(meanSent = mean(Sent, na.rm = T)) %>%
   ungroup() 
 
-tweet_loc <- get_googlemap("mumbai", zoom = 12)
+tweet_loc <- get_googlemap("delhi")
 
 tweet_map <- ggmap(tweet_loc) +
    geom_point(data = tweetSentMap,
@@ -722,29 +732,32 @@ loc_coords <- lookup_coords("new delhi")
 p <- list(data.frame("x" = c(loc_coords[[2]][1], loc_coords[[2]][3]),
                      "y" = c(loc_coords[[2]][2], loc_coords[[2]][4])))
 
-randomPoints <- data.frame("lng" = c(runif(1000, min = min(p[[1]][,1]), max = max(p[[1]][,1]))),
-                           "lat" = c(runif(1000, min = min(p[[1]][,2]), max = max(p[[1]][,2]))))
+randomPoints <- data.frame("lng" = c(runif(10000, min = min(p[[1]][,1]), max = max(p[[1]][,1]))),
+                           "lat" = c(runif(10000, min = min(p[[1]][,2]), max = max(p[[1]][,2])))) 
+
+coordinates(randomPoints) <- ~lng+lat
+randomGrid <- makegrid(randomPoints)
+coordinates(randomGrid) <- ~x1+x2
 
 library(sp)
 library(automap)
 
 tweet_sent_coords <- tweet_sentiment %>%
   left_join(hosp_data, by = c("day_created" = "Date")) %>%
-  na.omit() %>%
-  filter(day_created < "2020-04-20")
+  na.omit()
 
 coordinates(tweet_sent_coords) <- ~lng+lat
 
-coordinates(randomPoints) <- ~lng+lat
-
-lzn.kriged <- autoKrige(formula = Sent ~ 1, tweet_sent_coords, randomPoints) # simple Kriging
+lzn.kriged <- autoKrige(formula = Sent ~ 1, tweet_sent_coords, 
+                         randomGrid
+                        )
 
 lzn.kriged.dataframe <- as.data.frame(lzn.kriged$krige_output) %>%
   rename("Sent" = var1.pred)
 
 tweet_sentiment.dataframe <- as.data.frame(tweet_sent_coords)
 
-coordinates(lzn.kriged.dataframe) <- ~lng+lat
+coordinates(lzn.kriged.dataframe) <- ~x1+x2
 
 lzn.kriged <- autoKrige(formula = n ~ Sent, 
                         input_data = tweet_sent_coords, 
@@ -754,13 +767,12 @@ lzn.kriged.dataframe.final <- as.data.frame(lzn.kriged$krige_output)
 
 krigePlotMid = round(median(lzn.kriged.dataframe.final$var1.pred))
 
-hosp_krige_plot <- tweet_loc %>%
+krige_plot <- tweet_loc %>%
   ggmap() +
-  geom_point(data = lzn.kriged.dataframe.final,
-             aes(x = lng, y = lat, color = (var1.pred))) +
-  scale_color_gradient2(low = "blue", high = "red", midpoint = krigePlotMid, 
-                        mid = "yellow") +
-  labs(x = "Lon", y = "Lat", color = "Hospitalization Rate",alpha = "Positiveness") +
+  geom_contour_filled(data = lzn.kriged.dataframe.final,
+                      aes(x = x1, y = x2, z = var1.pred), 
+                      alpha = 0.8) + 
+  labs(x = "Lon", y = "Lat", fill = "Hospitalization Rate") +
   theme_minimal()
 
 library(ggpubr)
