@@ -25,7 +25,7 @@ source("info_cal_jidt_func.R")
 # name of Location
 loc = "myanmar"
 start_date_data <- as.Date("2020-06-01")
-end_date_data <- as.Date("2020-07-22")
+end_date_data <- as.Date("2020-07-30")
 
 locCode = ifelse(loc == "delhi","DL",NA)
 
@@ -69,35 +69,41 @@ vol_stm_daily <- cbind(rt_vol_daily,mean_daily_stm = mean_stm_daily[,2])
 
 if (loc == "delhi"){
   # India data from: https://www.kaggle.com/imdevskp/covid19-corona-virus-india-dataset
-  # https://www.hindustantimes.com/coronavirus/state/delhi-coronavirus-updates-covid-19-pandemic-latest-news/
+  # India data from: https://www.covid19india.org/
   # New Delhi: since Apr 18
   delhi_cases <- csv_epi_india_func("Delhi") %>%
     select(Date,newCases,activeCases) %>%
     filter(Date >= start_date_data-1)
   
   #-- fill the date without valid data --#
-  hosp_omit_df <- data.frame(omit_date = as.Date(c("2020-06-26","2020-07-01","2020-07-04","2020-07-06","2020-07-18")),
-                             omit_hosp = c(27657,27007,25940,25620,16711))
-  
-  day_seq <- seq(delhi_cases$Date[1],delhi_cases$Date[nrow(delhi_cases)],by = "day")
-  df_data_add <- data.frame(Date=day_seq,c=0)
-  df_data_filled <- merge(delhi_cases,df_data_add,by="Date",all=TRUE)
-  df_data_filled$c <- NULL
-  
-  delhi_cases <-  df_data_filled %>%
-    left_join(hosp_omit_df, by = c("Date" = "omit_date")) %>%
-    mutate(activeCases = ifelse(is.na(activeCases), omit_hosp, activeCases)) %>%
-    select(-omit_hosp)
+  # hosp_omit_df <- data.frame(omit_date = as.Date(c("2020-06-26","2020-07-01","2020-07-04","2020-07-06","2020-07-18")),
+  #                            omit_hosp = c(27657,27007,25940,25620,16711))
+  # 
+  # day_seq <- seq(delhi_cases$Date[1],delhi_cases$Date[nrow(delhi_cases)],by = "day")
+  # df_data_add <- data.frame(Date=day_seq,c=0)
+  # df_data_filled <- merge(delhi_cases,df_data_add,by="Date",all=TRUE)
+  # df_data_filled$c <- NULL
+  # 
+  # delhi_cases <-  df_data_filled %>%
+  #   left_join(hosp_omit_df, by = c("Date" = "omit_date")) %>%
+  #   mutate(activeCases = ifelse(is.na(activeCases), omit_hosp, activeCases)) %>%
+  #   select(-omit_hosp)
   #--    --#
   
   delhi_city_population_rate <- 0.65
-  daily_case_till_0625 <- delhi_cases$newCases[2:nrow(delhi_cases)][1:69]  # till 6.25
-  daily_case_since_0626 <- diff(c(70390,73780,77240,80188,83077,85161,87360,89802,92175,94695,97200,99444,
+  daily_case_till_0625 <- delhi_cases$newCases[2:70]  # from 4.18 to 6.25
+  cum_hosp_till_0625 <- delhi_cases$activeCases[1:70] # from 4.17 to 6.25
+  daily_case_since_0626 <- diff(c(73780,77240,80188,83077,85161,87360,89802,92175,94695,97200,99444,
                                   100823,102831,104864,107051,109140,110921,112494,113740,115346,116993,
-                                  118645,120107,121582,122793,123747,125096))
+                                  118645,120107,121582,122793,123747,125096,126323,127364,128389,129531,
+                                  130606,131219,132275,133310,134403))
+  cum_hosp_since_0626 <- c(27657,30149,30887,30470,26270,27007,26304,26148,25940,25038,25620,25449,23452,21567,21146,
+                           19895,19155,19017,18664,17807,17407,17235,16711,16031,15166,15288,14954,14554,13681,12657,
+                           11904,10994,10887,10770,10743)
   daily_case <- round(c(daily_case_till_0625,daily_case_since_0626)*delhi_city_population_rate)
-  hospital <- round(delhi_cases$activeCases[2:nrow(delhi_cases)]*delhi_city_population_rate) # since 2020-4-18
-  daily_new_hosp <- round(diff(delhi_cases$activeCases)*delhi_city_population_rate) # since 2020-4-18
+  hospital <- round(c(cum_hosp_till_0625[2:70],cum_hosp_since_0626)*delhi_city_population_rate) # since 2020-4-18
+  # hospital <- round(delhi_cases$activeCases[2:nrow(delhi_cases)]*delhi_city_population_rate) 
+  daily_new_hosp <- round(diff(c(cum_hosp_till_0625,cum_hosp_since_0626))*delhi_city_population_rate) # since 2020-4-18
   
   recordDate <- seq(start_date_data,start_date_data+length(daily_case)-1,by="day")
   
@@ -111,36 +117,42 @@ if (loc == "delhi"){
     filter(Date >= start_date_data-1)
   
   #-- fill the date without valid data --#
-  hosp_omit_df <- data.frame(omit_date = as.Date(c("2020-06-26","2020-07-01","2020-07-04","2020-07-06","2020-07-18")),
-                             omit_hosp = c(65829,79075,86040,87681,126926))
-  
-  day_seq <- seq(mumbai_cases$Date[1],mumbai_cases$Date[nrow(mumbai_cases)],by = "day")
-  df_data_add <- data.frame(Date=day_seq,c=0)
-  df_data_filled <- merge(mumbai_cases,df_data_add,by="Date",all=TRUE)
-  df_data_filled$c <- NULL
-  
-  mumbai_cases <-  df_data_filled %>%
-    left_join(hosp_omit_df, by = c("Date" = "omit_date")) %>%
-    mutate(activeCases = ifelse(is.na(activeCases), omit_hosp, activeCases)) %>%
-    select(-omit_hosp)
+  # hosp_omit_df <- data.frame(omit_date = as.Date(c("2020-06-26","2020-07-01","2020-07-04","2020-07-06","2020-07-18")),
+  #                            omit_hosp = c(65829,79075,86040,87681,126926))
+  # 
+  # day_seq <- seq(mumbai_cases$Date[1],mumbai_cases$Date[nrow(mumbai_cases)],by = "day")
+  # df_data_add <- data.frame(Date=day_seq,c=0)
+  # df_data_filled <- merge(mumbai_cases,df_data_add,by="Date",all=TRUE)
+  # df_data_filled$c <- NULL
+  # 
+  # mumbai_cases <-  df_data_filled %>%
+  #   left_join(hosp_omit_df, by = c("Date" = "omit_date")) %>%
+  #   mutate(activeCases = ifelse(is.na(activeCases), omit_hosp, activeCases)) %>%
+  #   select(-omit_hosp)
   #--    --#
   
   mumbai_city_population_rate <- 0.2
-  daily_case_till_0625 <- mumbai_cases$newCases[2:nrow(mumbai_cases)][1:69] # since 2020-4-18
-  daily_case_since_0626 <- diff(c(142900,147741,152765,159133,164626,169883,174761,180298,186626,
+  daily_case_till_0625 <- mumbai_cases$newCases[2:70] # from 2020-4-18 to 6.25
+  cum_hosp_till_0625 <- mumbai_cases$activeCases[1:70] # from 4.17 to 6.25
+  daily_case_since_0626 <- diff(c(147741,152765,159133,164626,169883,174761,180298,186626,
                                   192990,200064,206619,211987,217121,223724,230599,238461,246600,
-                                  254427,260924,267665,275640,284281,292589,300937,310455,318695,327031))
+                                  254427,260924,267665,275640,284281,292589,300937,310455,318695,
+                                  327031,337607,347502,357117,366368,375799,383723,391440,400651,
+                                  411798))
+  cum_hosp_since_0626 <- c(65829,72950,74888,78051,75979,79075,77260,79911,83295,86040,87682,89294,91065,93654,95647,
+                           99202,103516,105638,107665,111801,114648,120480,123377,128730,131334,132236,136980,140093,
+                           143714,145481,148601,147592,144694,146129,148150)
   daily_case <- round(c(daily_case_till_0625,daily_case_since_0626)*mumbai_city_population_rate)
-  hospital <- round(mumbai_cases$activeCases[2:nrow(mumbai_cases)]*mumbai_city_population_rate) # since 2020-4-18
-  daily_new_hosp <- round(diff(mumbai_cases$activeCases)*mumbai_city_population_rate) # since 2020-4-18
+  hospital <- round(c(cum_hosp_till_0625[2:70],cum_hosp_since_0626)*mumbai_city_population_rate) # since 2020-4-18
+  # hospital <- round(mumbai_cases$activeCases[2:nrow(mumbai_cases)]*mumbai_city_population_rate) # since 2020-4-18
+  daily_new_hosp <- round(diff(c(cum_hosp_till_0625,cum_hosp_since_0626))*mumbai_city_population_rate) # since 2020-4-18
   
   recordDate <- seq(start_date_data,start_date_data+length(daily_case)-1,by="day")
   
   vol_stm_daily <- vol_stm_daily %>%
     filter(recordDate >= start_date_data & recordDate <= start_date_data+length(daily_case)-1)
 } else if(loc == "jakarta") {
-  # Jakarta data from: https://github.com/open-covid-19/data
-  #                    https://corona.jakarta.go.id/en/data-pemantauan
+  # Jakarta data from: https://corona.jakarta.go.id/en/data-pemantauan
   # data from Apr 18
   # daily_case_jkt
   # hospital_jkt: numbers of PDP in hospital + numbers of cases in ICU
@@ -150,20 +162,23 @@ if (loc == "delhi"){
                        7272,7383,7459,7539,7600,7684,7786,7946,8037,8276,8423,8552,8628,8748,8863,
                        8968,9092,9209,9385,9525,9703,9830,9957,10123,10277,10472,10640,10853,10985,
                        11080,11276,11482,11677,11824,12039,12295,12526,12725,13069,13359,13598,13957,
-                       14361,14639,14914,15173,15466,15707,16038,16351,16712,17153,17529))
-  # hospital <- c(1373,1468,1476,1480,1486,1496,1499,860,871,885,903,945,969,982,
-  #               997,994,1001,1015,1022,1034,1060,1065,1073,1103,1233,587,
-  #               599,680,558,575,586,507,585,585,651,652,784,658,722,810,910,
-  #               1005,1105,816,1134,1268,1281,1372,1526,1424,1486,1361,1387,1537,
-  #               1438,1436,1143,1148,1199,1312,1211,1201,931,962,763,712,776,823,776,878,849,
-  #               690,770,753,736,770,804,690,711,718,731,740,761,756,818,790,734,821,957,943,800) + # will no longer update
-  hospital <- c(1727,1769,1839,1826,1935,1985,2010,1988,1947,1952,1950,2024,2002,2073,
+                       14361,14639,14914,15173,15466,15707,16038,16351,16712,17153,17529,17945,18230,
+                       18623,19001,19473,19885,20470,20769))
+  hospital <- c(1373,1468,1476,1480,1486,1496,1499,860,871,885,903,945,969,982,
+                997,994,1001,1015,1022,1034,1060,1065,1073,1103,1233,587,
+                599,680,558,575,586,507,585,585,651,652,784,658,722,810,910,
+                1005,1105,816,1134,1268,1281,1372,1526,1424,1486,1361,1387,1537,
+                1438,1436,1143,1148,1199,1312,1211,1201,931,962,763,712,776,823,776,878,849,
+                690,770,753,736,770,804,690,711,718,731,740,761,756,818,790,734,821,957,943,800,
+                981,780,1136,1067,1158,1379,1608,1860,2070,1557,1563,1546,1585,1585) + # will no longer update
+    c(1727,1769,1839,1826,1935,1985,2010,1988,1947,1952,1950,2024,2002,2073,
       2151,2089,2062,2080,2146,2195,2196,2281,2312,2360,2258,1843,1833,
       1877,1900,1908,1932,1946,1936,1969,1955,1975,2006,2031,2044,2044,
       2034,2055,2007,1848,1823,1794,1743,1699,1670,1633,1635,1445,1448,
       1442,1427,1446,1424,1419,1368,1390,1416,1402,1377,1382,1340,1287,
       1310,1319,1349,1338,1330,1355,1322,1027,951,889,804,736,646,584,
-      495,405,417,451,476,495,554,597,619,691,777,826,892,923,1026,1073,1193) # since 2020-4-17, Only ICU
+      495,405,417,451,476,495,554,597,619,691,777,826,892,923,1026,1073,
+      1193,1201,1300,1410,1491,1702,1848,1944,2049) # since 2020-4-17, Only ICU
   
   daily_new_hosp <- diff(hospital) # since 2020-4-18
   hospital <- hospital[2:length(hospital)] # since 2020-4-18
@@ -180,12 +195,13 @@ if (loc == "delhi"){
   daily_case <- ceiling(c(33,32,27,19,15,13,15,53,15,9,7,9,7,6,6,3,
                           18,1,1,3,8,4,5,6,2,0,0,7,0,3,3,2,1,3,0,3,0,2,3,9,
                           11,11,1,4,1,1,1,17,1,2,8,7,2,4,0,4,5,1,0,0,0,6,5,1,1,3,5,1,1,4,0,0,7,2,2,
-                          6,1,5,5,5,0,2,5,0,14,1,3,7,5,4,3,7,3,0,5,6)/2)
+                          6,1,5,5,5,0,2,5,0,14,1,3,7,5,4,3,7,3,0,5,6,8,10,3,9,4,2,1,6)/2)
   hospital <- ceiling(c(964,899,790,746,655,425,359,314,309,277,270,232,228,213,187,180,176,
                         193,187,173,165,161,161,159,163,163,117,112,115,114,116,118,120,90,
                         84,71,68,63,57,59,66,63,74,59,61,60,59,58,75,73,75,82,88,90,86,
                         80,84,89,90,90,84,81,86,80,71,72,71,75,73,62,64,51,51,58,57,56,62,56,
-                        61,61,65,65,65,59,57,70,71,72,78,82,83,85,92,95,96,92,98)/2) # since 2020-4-17
+                        61,61,65,65,65,59,57,70,71,72,78,82,83,85,92,95,96,92,98,106,114,115,
+                        124,126,128,129,135)/2) # since 2020-4-17
   
   daily_new_hosp <- diff(hospital) # since 2020-4-18
   hospital <- hospital[2:length(hospital)] # since 2020-4-18
@@ -206,9 +222,10 @@ if (loc == "delhi"){
   # data source: https://www.worldometers.info/coronavirus/country/myanmar/
   start_date_data <- as.Date("2020-06-01")
   daily_case <- c(4,4,1,3,0,4,2,2,2,2,12,1,0,0,1,0,0,1,23,1,3,0,2,1,0,0,0,6,0,0,4,1,2,7,0,3,0,1,2,
-                  7,4,1,5,1,0,2,0,1,1,0,0,2)
+                  7,4,1,5,1,0,2,0,1,1,0,0,2,0,3,2,2,0,0,1,2)
   hospital <- c(80,84,83,82,82,79,78,80,79,81,77,89,90,88,88,81,77,71,70,88,85,84,84,82,79,76,72,71,
-                75,72,71,75,75,63,67,66,65,65,61,59,64,64,64,69,70,65,63,62,61,59,57,55,57) # since 2020-05-31
+                75,72,71,75,75,63,67,66,65,65,61,59,64,64,64,69,70,65,63,62,61,59,57,55,57,57,54,54,
+                54,52,51,51,52) # since 2020-05-31
   
   daily_new_hosp <- diff(hospital) # since 2020-6-1
   hospital <- hospital[2:length(hospital)] # since 2020-6-1
