@@ -6,6 +6,22 @@ library("rJava")
 #   in R (e.g. with setwd()) to the location of this file (i.e. demos/r) !!
 .jaddClassPath("/home/lijie/twitterData/infodynamics-dist-1.5/infodynamics.jar")
 
+teCal_jidt_gau_func <- function(srcArr,dstArr,t_lag){
+  # k: "4" as an example; histLen: 1L as an example
+  # Create a TE calculator:
+  teCalc<-.jnew("infodynamics/measures/continuous/gaussian/TransferEntropyCalculatorGaussian")
+  .jcall(teCalc,"V","setProperty", "DELAY", as.character(t_lag)) # specify the time lag for TE calculation
+  # .jcall(teCalc,"V","setProperty", "k", k) # Use Kraskov parameter K nearest points
+  
+  
+  # Perform calculation with correlated source:
+  # .jcall(teCalc,"V","initialise", histLen) # Use history length 1 (Schreiber k=1)
+  .jcall(teCalc,"V","setObservations", srcArr, dstArr)
+  result <- .jcall(teCalc,"D","computeAverageLocalOfObservations") # nat
+  result_bit <- log2(exp(1))*result    # nat to bit
+  return(result_bit)
+}
+
 teCal_jidt_ksg_func <- function(srcArr,dstArr,t_lag,k,histLen){
   # k: "4" as an example; histLen: 1L as an example
   # Create a TE calculator:
@@ -86,6 +102,7 @@ opt_lag4mi_func <- function(srcArr,dstArr,max_lag){
     mi <- miCal_jidt_func_lag(srcArr,dstArr,as.character(i))
     if (is.na(mi) | is.na(opt_mi)){
       opt_lag <- 1
+      print("!!!--MI is NA.")
     }else if(mi>opt_mi){
       opt_mi <- mi
       opt_lag <- i
@@ -125,10 +142,11 @@ te_cal_opt_lag_func <- function(src_data,dst_data,max_t_lag,k,histLen,knl_width)
                                   as.character(k),histLen),silent = T)
   if ("try-error" %in% class(te_value)){
     te_value <- teCal_jidt_knl_func(src_data,dst_data,histLen,knl_width)
+    print("TE is calculated by Kernel without optimal lag.")
   } else {
     print("TE is calculated by KSG with optimal lag.")
   }
-  
+
   return(te_value)
 }
 
@@ -159,8 +177,8 @@ week_index_cal_func <- function(start_date,tweet_data,epi_data){
     epi_data_period <- epi_data %>%
       filter(recordDate >= start_date & recordDate <= end_date)
     daily_period <- epi_data_period$daily_case
-    new_hospital_period <- epi_data_period$daily_new_hosp
-    # hospital_period <- epi_data_period$hospital
+    new_hospital_period <- epi_data_period$daily_new_hosp # daily new hospitalizatin
+    # new_hospital_period <- epi_data_period$hospital         # accumulative hospitalizatin
     daily_period_normal <- normalization_func(daily_period)
     hospital_period_normal <- normalization_func(new_hospital_period)
     
@@ -173,8 +191,12 @@ week_index_cal_func <- function(start_date,tweet_data,epi_data){
     hist_len <- 1L
     k_nearest <- 4L
     knl_width <- 0.5
+    time_delay <- 1
     te_stm_case[ii] <- te_cal_opt_lag_func(stm_period_normal,daily_period_normal,max_time_lag,k_nearest,hist_len,knl_width)
     te_stm_hosp[ii] <- te_cal_opt_lag_func(stm_period_normal,hospital_period_normal,max_time_lag,k_nearest,hist_len,knl_width)
+    
+    # te_stm_case[ii] <- teCal_jidt_gau_func(stm_period_normal,daily_period_normal,as.character(time_delay))
+    # te_stm_hosp[ii] <- teCal_jidt_gau_func(stm_period_normal,hospital_period_normal,as.character(time_delay))
     
     cc_stm_case[ii] <- round(cor(stm_period_normal,daily_period_normal),3)
     cc_stm_hosp[ii] <- round(cor(stm_period_normal,hospital_period_normal),3)
