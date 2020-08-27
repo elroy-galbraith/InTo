@@ -192,11 +192,11 @@ week_index_cal_func <- function(start_date,tweet_data,epi_data){
     k_nearest <- 4L
     knl_width <- 0.5
     time_delay <- 1
-    te_stm_case[ii] <- te_cal_opt_lag_func(stm_period_normal,daily_period_normal,max_time_lag,k_nearest,hist_len,knl_width)
-    te_stm_hosp[ii] <- te_cal_opt_lag_func(stm_period_normal,hospital_period_normal,max_time_lag,k_nearest,hist_len,knl_width)
+    # te_stm_case[ii] <- te_cal_opt_lag_func(stm_period_normal,daily_period_normal,max_time_lag,k_nearest,hist_len,knl_width)
+    # te_stm_hosp[ii] <- te_cal_opt_lag_func(stm_period_normal,hospital_period_normal,max_time_lag,k_nearest,hist_len,knl_width)
     
-    # te_stm_case[ii] <- teCal_jidt_gau_func(stm_period_normal,daily_period_normal,as.character(time_delay))
-    # te_stm_hosp[ii] <- teCal_jidt_gau_func(stm_period_normal,hospital_period_normal,as.character(time_delay))
+    te_stm_case[ii] <- teCal_jidt_gau_func(stm_period_normal,daily_period_normal,as.character(time_delay))
+    te_stm_hosp[ii] <- teCal_jidt_gau_func(stm_period_normal,hospital_period_normal,as.character(time_delay))
     
     cc_stm_case[ii] <- round(cor(stm_period_normal,daily_period_normal),3)
     cc_stm_hosp[ii] <- round(cor(stm_period_normal,hospital_period_normal),3)
